@@ -200,9 +200,8 @@ class Trainer(object):
         return True
 
     @torch.no_grad()
-    def updateGSParams(self) -> bool:
-        self.gaussians.optimizer_step()
-        self.gaussians.optimizer.zero_grad(set_to_none = True)
+    def updateGSParams(self, iteration) -> bool:
+        self.gaussians.optimizer_step(iteration)
         return True
 
     @torch.no_grad()
@@ -250,7 +249,7 @@ class Trainer(object):
             if iteration % 3000 == 0 and iteration > 15_000 and iteration < 30_000:
                 self.finalPrune()
 
-            self.updateGSParams()
+            self.updateGSParams(iteration)
 
             iteration += 1
             self.iteration = iteration
