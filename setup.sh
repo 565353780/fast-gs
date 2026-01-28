@@ -1,13 +1,14 @@
 cd ..
+git clone https://github.com/565353780/base-trainer.git
 git clone --depth 1 https://github.com/camenduru/simple-knn.git
 git clone --depth 1 https://github.com/rahul-goel/fused-ssim.git
 
-pip install ninja plyfile tqdm
+pip install ninja plyfile
 
-pip3 install torch torchvision torchaudio \
-  --index-url https://download.pytorch.org/whl/cu124
+cd base-trainer
+./setup.sh
 
-cd simple-knn
+cd ../simple-knn
 python setup.py install
 
 cd ../fused-ssim

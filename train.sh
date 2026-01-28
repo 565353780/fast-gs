@@ -14,8 +14,9 @@ CUDA_VISIBLE_DEVICES=0 \
   -s ${DATA_PATH}/gs \
   -i masked_images \
   -m ${DATA_PATH}/fastgs \
-  -r 1 \
-  --densification_interval 100 \
+  -r 2 \
+  --white_background \
   --optimizer_type default \
+  --densification_interval 100 \
   --test_iterations 30000 \
   --grad_abs_thresh 0.0008
