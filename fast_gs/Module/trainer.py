@@ -169,7 +169,7 @@ class Trainer(object):
     @torch.no_grad()
     def densifyStep(self, render_pkg: dict) -> bool:
         size_threshold = 20
-        my_viewpoint_stack = self.scene.getTrainCameras().copy()
+        my_viewpoint_stack = self.scene.train_cameras
         camlist = sampling_cameras(my_viewpoint_stack)
 
         # The multiview consistent densification of fastgs
@@ -192,7 +192,7 @@ class Trainer(object):
 
     @torch.no_grad()
     def finalPrune(self) -> bool:
-        my_viewpoint_stack = self.scene.getTrainCameras().copy()
+        my_viewpoint_stack = self.scene.train_cameras
         camlist = sampling_cameras(my_viewpoint_stack)
 
         _, pruning_score = compute_gaussian_score_fastgs(camlist, self.gaussians, self.pipe, self.background, self.opt)                    
