@@ -1,22 +1,10 @@
-#
-# Copyright (C) 2023, Inria
-# GRAPHDECO research group, https://team.inria.fr/graphdeco
-# All rights reserved.
-#
-# This software is free for non-commercial, research and evaluation use 
-# under the terms of the LICENSE.md file.
-#
-# For inquiries contact  george.drettakis@inria.fr
-#
-
+import os
 import torch
-import numpy as np
-import os, random, time
 from random import randint
 from lpipsPyTorch import lpips
 from utils.loss_utils import l1_loss
 from fused_ssim import fused_ssim as fast_ssim
-from gaussian_renderer import render_fastgs, network_gui_ws
+from gaussian_renderer import render_fastgs
 import sys
 from scene import Scene, GaussianModel
 from utils.general_utils import safe_state
@@ -25,11 +13,7 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
-try:
-    from torch.utils.tensorboard import SummaryWriter
-    TENSORBOARD_FOUND = True
-except ImportError:
-    TENSORBOARD_FOUND = False
+from torch.utils.tensorboard import SummaryWriter
 
 from utils.fast_utils import compute_gaussian_score_fastgs, sampling_cameras
 
@@ -64,14 +48,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     bg = torch.rand((3), device="cuda") if opt.random_background else background
 
     for iteration in range(first_iter, opt.iterations + 1):
-
-        if websockets:
-            if network_gui_ws.curr_id >= 0 and network_gui_ws.curr_id < len(scene.getTrainCameras()):
-                cam = scene.getTrainCameras()[network_gui_ws.curr_id]
-                net_image = render_fastgs(cam, gaussians, pipe, background, opt.mult, 1.0)["render"]
-                network_gui_ws.latest_width = cam.image_width
-                network_gui_ws.latest_height = cam.image_height
-                network_gui_ws.latest_result = net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
 
         iter_start.record()
         
@@ -191,11 +167,7 @@ def prepare_output_and_logger(args):
         cfg_log_f.write(str(Namespace(**vars(args))))
 
     # Create Tensorboard writer
-    tb_writer = None
-    if TENSORBOARD_FOUND:
-        tb_writer = SummaryWriter(args.model_path)
-    else:
-        print("Tensorboard not available: not logging progress")
+    tb_writer = SummaryWriter(args.model_path)
     return tb_writer
 
 def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs):
@@ -266,8 +238,6 @@ if __name__ == "__main__":
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    if(args.websockets):
-        network_gui_ws.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     
     training(
