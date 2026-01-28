@@ -1,27 +1,19 @@
-#
-# Copyright (C) 2023, Inria
-# GRAPHDECO research group, https://team.inria.fr/graphdeco
-# All rights reserved.
-#
-# This software is free for non-commercial, research and evaluation use 
-# under the terms of the LICENSE.md file.
-#
-# For inquiries contact  george.drettakis@inria.fr
-#
-
 import os
 import sys
+import json
+import numpy as np
+
 from PIL import Image
+from pathlib import Path
 from typing import NamedTuple
+from plyfile import PlyData, PlyElement
+
+from utils.sh_utils import SH2RGB
+from utils.graphics_utils import BasicPointCloud
+from utils.graphics_utils import getWorld2View2, focal2fov, fov2focal
 from scene.colmap_loader import read_extrinsics_text, read_intrinsics_text, qvec2rotmat, \
     read_extrinsics_binary, read_intrinsics_binary, read_points3D_binary, read_points3D_text
-from utils.graphics_utils import getWorld2View2, focal2fov, fov2focal
-import numpy as np
-import json
-from pathlib import Path
-from plyfile import PlyData, PlyElement
-from utils.sh_utils import SH2RGB
-from scene.gaussian_model import BasicPointCloud
+
 
 class CameraInfo(NamedTuple):
     uid: int

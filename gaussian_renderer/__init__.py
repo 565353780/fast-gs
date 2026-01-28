@@ -1,19 +1,9 @@
-#
-# Copyright (C) 2023, Inria
-# GRAPHDECO research group, https://team.inria.fr/graphdeco
-# All rights reserved.
-#
-# This software is free for non-commercial, research and evaluation use 
-# under the terms of the LICENSE.md file.
-#
-# For inquiries contact  george.drettakis@inria.fr
-#
-
-import torch
 import math
-from scene.gaussian_model import GaussianModel
+import torch
 from utils.sh_utils import eval_sh
 from diff_gaussian_rasterization_fastgs import GaussianRasterizationSettings, GaussianRasterizer
+
+from fast_gs.Model.gs import GaussianModel
 
 def render_fastgs(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, mult, scaling_modifier = 1.0, override_color = None, get_flag=None, metric_map = None):
     """

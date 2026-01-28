@@ -1,10 +1,11 @@
 import torch
-from PIL import ImageFilter
-from gaussian_renderer import render_fastgs
-from .loss_utils import l1_loss
-from fused_ssim import fused_ssim as fast_ssim
-import torchvision.transforms as transforms
 import random
+
+from fused_ssim import fused_ssim as fast_ssim
+
+from gaussian_renderer import render_fastgs
+
+from fast_gs.Loss.l1 import l1_loss
 
 
 def sampling_cameras(my_viewpoint_stack):
@@ -15,7 +16,7 @@ def sampling_cameras(my_viewpoint_stack):
     for _ in range(num_cams):
         loc = random.randint(0, len(my_viewpoint_stack) - 1)
         camlist.append(my_viewpoint_stack.pop(loc))
-    
+
     return camlist
 
 def get_loss(reconstructed_image, original_image):
@@ -78,7 +79,7 @@ def compute_gaussian_score_fastgs(camlist, gaussians, pipe, bg, args, DENSIFY = 
         gt_image = my_viewpoint_cam.original_image.cuda()
         get_flag = True
         l1_loss_norm = get_loss(render_image, gt_image)
-        
+
         metric_map = (l1_loss_norm > args.loss_thresh).int()
 
         render_pkg = render_fastgs(my_viewpoint_cam, gaussians, pipe, bg, args.mult, get_flag = get_flag, metric_map = metric_map)
@@ -97,7 +98,7 @@ def compute_gaussian_score_fastgs(camlist, gaussians, pipe, bg, args, DENSIFY = 
             full_metric_score += photometric_loss * accum_loss_counts
 
     pruning_score = (full_metric_score - torch.min(full_metric_score)) / (torch.max(full_metric_score) - torch.min(full_metric_score))
-    
+
     if DENSIFY:
         importance_score = torch.div(full_metric_counts, len(camlist), rounding_mode='floor')
     else:

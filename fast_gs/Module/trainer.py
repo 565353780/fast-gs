@@ -46,7 +46,7 @@ class Trainer(object):
         args.source_path = colmap_data_folder_path
         args.images = 'masked_images'
         args.white_background = True
-        args.resolution = 1
+        args.resolution = 2
         args.model_path = save_result_folder_path
         args.densification_interval = 500
         args.grad_abs_thresh = 0.0008
