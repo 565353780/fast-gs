@@ -48,6 +48,8 @@ class Trainer(object):
         args.white_background = True
         args.resolution = 1
         args.model_path = save_result_folder_path
+        args.densification_interval = 500
+        args.grad_abs_thresh = 0.0008
 
         print("Optimizing " + args.model_path)
 
