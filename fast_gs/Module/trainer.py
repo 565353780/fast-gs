@@ -200,7 +200,7 @@ class Trainer(object):
         return True
 
     @torch.no_grad()
-    def updateGSParams(self, iteration) -> bool:
+    def updateGSParams(self, iteration: int) -> bool:
         self.gaussians.optimizer_step(iteration)
         return True
 

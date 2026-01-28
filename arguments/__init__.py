@@ -84,12 +84,13 @@ class OptimizationParams(ParamGroup):
         self.rotation_lr = 0.001
         self.percent_dense = 0.001
         self.lambda_dssim = 0.2
+
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500
         self.densify_until_iter = 15_000
         self.densify_grad_threshold = 0.0002
-        
+
         # fastgs parameters
         self.loss_thresh = 0.1
         self.grad_abs_thresh = 0.0012  
