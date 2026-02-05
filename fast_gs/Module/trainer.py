@@ -9,7 +9,6 @@ from lpipsPyTorch import lpips
 from fused_ssim import fused_ssim as fast_ssim
 
 from argparse import ArgumentParser
-from arguments import ModelParams, PipelineParams, OptimizationParams
 from utils.general_utils import safe_state
 from utils.fast_utils import compute_gaussian_score_fastgs, sampling_cameras
 from gaussian_renderer import render_fastgs
@@ -17,6 +16,7 @@ from gaussian_renderer import render_fastgs
 from base_trainer.Module.logger import Logger
 from base_trainer.Module.base_trainer import BaseTrainer
 
+from fast_gs.Config.config import ModelParams, PipelineParams, OptimizationParams
 from fast_gs.Loss.l1 import l1_loss
 from fast_gs.Metric.psnr import psnr
 from fast_gs.Dataset.scene import Scene
@@ -44,12 +44,7 @@ class Trainer(object):
         args = parser.parse_args(sys.argv[1:])
 
         args.source_path = colmap_data_folder_path
-        args.images = 'masked_images'
-        args.white_background = True
-        args.resolution = 2
         args.model_path = save_result_folder_path
-        args.densification_interval = 500
-        args.grad_abs_thresh = 0.0008
 
         print("Optimizing " + args.model_path)
 

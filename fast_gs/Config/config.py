@@ -1,17 +1,6 @@
-#
-# Copyright (C) 2023, Inria
-# GRAPHDECO research group, https://team.inria.fr/graphdeco
-# All rights reserved.
-#
-# This software is free for non-commercial, research and evaluation use 
-# under the terms of the LICENSE.md file.
-#
-# For inquiries contact  george.drettakis@inria.fr
-#
-
-from argparse import ArgumentParser, Namespace
-import sys
 import os
+import sys
+from argparse import ArgumentParser, Namespace
 
 class GroupParams:
     pass
@@ -46,12 +35,12 @@ class ParamGroup:
 
 class ModelParams(ParamGroup): 
     def __init__(self, parser, sentinel=False):
-        self.sh_degree = 3
+        self.sh_degree = 1
         self._source_path = ""
         self._model_path = ""
-        self._images = "images"
-        self._resolution = -1
-        self._white_background = False
+        self._images = "masked_images"
+        self._resolution = 1
+        self._white_background = True
         self.data_device = "cuda"
         self.eval = False
         super().__init__(parser, "Loading Parameters", sentinel)
@@ -85,7 +74,7 @@ class OptimizationParams(ParamGroup):
         self.percent_dense = 0.001
         self.lambda_dssim = 0.2
 
-        self.densification_interval = 100
+        self.densification_interval = 500
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500
         self.densify_until_iter = 15_000
@@ -93,14 +82,14 @@ class OptimizationParams(ParamGroup):
 
         # fastgs parameters
         self.loss_thresh = 0.1
-        self.grad_abs_thresh = 0.0012  
+        self.grad_abs_thresh = 0.0012
         self.highfeature_lr = 0.005
         self.lowfeature_lr = 0.0025
         self.grad_thresh = 0.0002
         self.dense = 0.001
         self.mult = 0.5      # multiplier for the compact box to control the tile number of each splat
 
-        self.random_background = False
+        self.random_background = True
         self.optimizer_type = "default"
         super().__init__(parser, "Optimization Parameters")
 
