@@ -80,7 +80,7 @@ class Trainer(object):
         iteration: int,
         viewpoint_cam,
         lambda_dssim: float = 0.2,
-        lambda_opacity: float = 0.01,
+        lambda_opacity: float = 1e-3,
         lambda_scaling: float = 10.0,
     ) -> Tuple[dict, dict]:
         self.gaussians.update_learning_rate(iteration)
