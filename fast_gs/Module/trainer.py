@@ -30,12 +30,14 @@ class Trainer(object):
         colmap_data_folder_path: str='',
         save_result_folder_path: str='./output/',
         save_log_folder_path: str='./logs/',
+        test_freq: int=10000,
+        save_freq: int=10000,
     ) -> None:
         self.save_result_folder_path = save_result_folder_path
         self.save_log_folder_path = save_log_folder_path
 
-        self.test_freq = 10000
-        self.save_freq = 10000
+        self.test_freq = test_freq
+        self.save_freq = save_freq
 
         # Set up command line argument parser
         parser = ArgumentParser(description="Training script parameters")
