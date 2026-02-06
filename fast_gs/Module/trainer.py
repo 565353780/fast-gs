@@ -230,6 +230,9 @@ class Trainer(object):
         return True
 
     def train(self, iteration_num: int = 30000):
+        # 强制使用 float32，避免其他脚本或环境把默认 dtype 设为 bfloat16 导致类型不匹配
+        torch.set_default_dtype(torch.float32)
+
         progress_bar = tqdm(desc="Training progress", total=iteration_num)
         iteration = 1
         for _ in range(iteration_num):
