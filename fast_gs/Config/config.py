@@ -90,7 +90,6 @@ class OptimizationParams(ParamGroup):
         self.mult = 0.5      # multiplier for the compact box to control the tile number of each splat
 
         self.random_background = True
-        self.optimizer_type = "default"
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):

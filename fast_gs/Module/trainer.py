@@ -33,8 +33,8 @@ class Trainer(object):
         self.save_result_folder_path = save_result_folder_path
         self.save_log_folder_path = save_log_folder_path
 
-        self.test_freq = 1000
-        self.save_freq = 1000
+        self.test_freq = 10000
+        self.save_freq = 10000
 
         # Set up command line argument parser
         parser = ArgumentParser(description="Training script parameters")
