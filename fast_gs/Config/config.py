@@ -66,9 +66,9 @@ class OptimizationParams(ParamGroup):
         self.position_lr_final = 0.0000016
         self.position_lr_delay_mult = 0.01
         self.position_lr_max_steps = 30_000
-        self.feature_lr = 0.0025 
-        self.shfeature_lr = 0.005 
-        self.opacity_lr = 0.025 
+        self.feature_lr = 0.0025
+        self.shfeature_lr = 0.005
+        self.opacity_lr = 0.025
         self.scaling_lr = 0.005
         self.rotation_lr = 0.001
         self.percent_dense = 0.001
@@ -88,8 +88,6 @@ class OptimizationParams(ParamGroup):
         self.grad_thresh = 0.0002
         self.dense = 0.001
         self.mult = 0.5      # multiplier for the compact box to control the tile number of each splat
-
-        self.random_background = True
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):

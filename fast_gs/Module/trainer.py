@@ -81,7 +81,7 @@ class Trainer(object):
         viewpoint_cam,
         lambda_dssim: float = 0.2,
         lambda_opacity: float = 0.01,
-        lambda_scaling: float = 1.0,
+        lambda_scaling: float = 10.0,
     ) -> Tuple[dict, dict]:
         self.gaussians.update_learning_rate(iteration)
 
@@ -212,7 +212,7 @@ class Trainer(object):
         my_viewpoint_stack = self.scene.train_cameras
         camlist = sampling_cameras(my_viewpoint_stack)
 
-        _, pruning_score = compute_gaussian_score_fastgs(camlist, self.gaussians, self.pipe, self.background, self.opt)                    
+        _, pruning_score = compute_gaussian_score_fastgs(camlist, self.gaussians, self.pipe, self.background, self.opt)
         self.gaussians.final_prune_fastgs(min_opacity = 0.1, pruning_score = pruning_score)
         return True
 
