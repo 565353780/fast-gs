@@ -97,7 +97,7 @@ class Trainer(object):
 
         opacity_loss = torch.zeros([1], dtype=rgb_loss.dtype).to(rgb_loss.device)
         if lambda_opacity > 0:
-            opacity_loss = lambda_opacity * nn.MSELoss()(self.gaussians.get_opacity, torch.zeros_like(self.gaussians._opacity))
+            opacity_loss = lambda_opacity * nn.L1Loss()(self.gaussians.get_opacity, torch.zeros_like(self.gaussians._opacity))
 
         scaling_loss = torch.zeros([1], dtype=rgb_loss.dtype).to(rgb_loss.device)
         if lambda_scaling > 0:
