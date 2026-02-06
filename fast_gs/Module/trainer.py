@@ -96,11 +96,11 @@ class Trainer(object):
         ssim_loss = 1.0 - fast_ssim(image.unsqueeze(0), gt_image.unsqueeze(0))
 
         opacity_loss = torch.zeros([1], dtype=rgb_loss.dtype).to(rgb_loss.device)
-        if lambda_opacity > 0:
+        if lambda_opacity > 0 and iteration < self.opt.densify_until_iter:
             opacity_loss = lambda_opacity * nn.L1Loss()(self.gaussians.get_opacity, torch.zeros_like(self.gaussians._opacity))
 
         scaling_loss = torch.zeros([1], dtype=rgb_loss.dtype).to(rgb_loss.device)
-        if lambda_scaling > 0:
+        if lambda_scaling > 0 and iteration < self.opt.densify_until_iter:
             scaling_loss = lambda_scaling * nn.MSELoss()(self.gaussians.get_scaling, torch.zeros_like(self.gaussians._scaling))
 
         total_loss = \
@@ -263,7 +263,7 @@ class Trainer(object):
             # The multiview consistent pruning of fastgs. We do it every 3k iterations after 15k
             # In this stage, the model converge basically. So we can prune more aggressively without degrading rendering quality.
             # You can check the rendering results of 20K iterations in arxiv version (https://arxiv.org/abs/2511.04283), the rendering quality is already very good.
-            if iteration % 3000 == 0 and iteration > 15_000 and iteration < 30_000:
+            if iteration % 3000 == 0 and iteration > self.opt.densify_until_iter:
                 self.finalPrune()
 
             self.updateGSParams(iteration)
