@@ -2,6 +2,7 @@ import os
 import sys
 import torch
 
+from torch import nn
 from tqdm import tqdm
 from typing import Tuple
 
@@ -79,6 +80,8 @@ class Trainer(object):
         iteration: int,
         viewpoint_cam,
         lambda_dssim: float = 0.2,
+        lambda_opacity: float = 0.01,
+        lambda_scaling: float = 1.0,
     ) -> Tuple[dict, dict]:
         self.gaussians.update_learning_rate(iteration)
 
@@ -89,15 +92,30 @@ class Trainer(object):
         image = render_pkg["render"]
 
         gt_image = viewpoint_cam.original_image.cuda()
-        reg_loss = l1_loss(image, gt_image)
+        rgb_loss = l1_loss(image, gt_image)
         ssim_loss = 1.0 - fast_ssim(image.unsqueeze(0), gt_image.unsqueeze(0))
-        total_loss = (1.0 - lambda_dssim) * reg_loss + lambda_dssim * ssim_loss
+
+        opacity_loss = torch.zeros([1], dtype=rgb_loss.dtype).to(rgb_loss.device)
+        if lambda_opacity > 0:
+            opacity_loss = lambda_opacity * nn.MSELoss()(self.gaussians.get_opacity, torch.zeros_like(self.gaussians._opacity))
+
+        scaling_loss = torch.zeros([1], dtype=rgb_loss.dtype).to(rgb_loss.device)
+        if lambda_scaling > 0:
+            scaling_loss = lambda_scaling * nn.MSELoss()(self.gaussians.get_scaling, torch.zeros_like(self.gaussians._scaling))
+
+        total_loss = \
+            (1.0 - lambda_dssim) * rgb_loss + \
+            lambda_dssim * ssim_loss + \
+            opacity_loss + \
+            scaling_loss
 
         total_loss.backward()
 
         loss_dict = {
-            'reg': reg_loss.item(),
+            'rgb': rgb_loss.item(),
             'ssim': ssim_loss.item(),
+            'opacity': opacity_loss.item(),
+            'scaling': scaling_loss.item(),
             'total': total_loss.item(),
         }
 
@@ -105,13 +123,17 @@ class Trainer(object):
 
     @torch.no_grad
     def logStep(self, iteration: int, loss_dict: dict) -> bool:
-        reg_loss = loss_dict['reg']
+        rgb_loss = loss_dict['rgb']
         ssim_loss = loss_dict['ssim']
+        opacity_loss = loss_dict['opacity']
+        scaling_loss = loss_dict['scaling']
         total_loss = loss_dict['total']
 
         # Log and save
-        self.logger.addScalar('Loss/reg', reg_loss, iteration)
+        self.logger.addScalar('Loss/rgb', rgb_loss, iteration)
         self.logger.addScalar('Loss/ssim', ssim_loss, iteration)
+        self.logger.addScalar('Loss/opacity', opacity_loss, iteration)
+        self.logger.addScalar('Loss/scaling', scaling_loss, iteration)
         self.logger.addScalar('Loss/total', total_loss, iteration)
 
         self.logger.addScalar('Gaussian/total_points', self.gaussians.get_xyz.shape[0], iteration)
@@ -215,7 +237,7 @@ class Trainer(object):
 
             if iteration % 10 == 0:
                 bar_loss_dict = {
-                    "reg": f"{loss_dict['reg']:.{5}f}",
+                    "rgb": f"{loss_dict['rgb']:.{5}f}",
                     "ssim": f"{loss_dict['ssim']:.{5}f}",
                     "total": f"{loss_dict['total']:.{5}f}",
                     "Points": f"{len(self.gaussians.get_xyz)}"

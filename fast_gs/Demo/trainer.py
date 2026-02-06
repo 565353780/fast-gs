@@ -2,7 +2,7 @@ import sys
 sys.path.append('../base-trainer')
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES']='2'
+os.environ['CUDA_VISIBLE_DEVICES']='0'
 
 from fast_gs.Method.time import getCurrentTime
 from fast_gs.Module.trainer import Trainer
