@@ -1,7 +1,9 @@
 import math
 import torch
-from utils.sh_utils import eval_sh
+
 from diff_gaussian_rasterization_fastgs import GaussianRasterizationSettings, GaussianRasterizer
+
+from utils.sh_utils import eval_sh
 
 from fast_gs.Model.gs import GaussianModel
 
