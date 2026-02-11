@@ -2,7 +2,6 @@ import sys
 sys.path.append('../../../camera-control/')
 
 import os
-import json
 import torch
 import random
 import numpy as np
@@ -15,7 +14,6 @@ from camera_control.Module.camera_convertor import CameraConvertor
 from camera_control.Module.camera import Camera
 
 from scene.dataset_readers import readColmapSceneInfo
-from utils.camera_utils import camera_to_JSON
 from utils.graphics_utils import getProjectionMatrix, focal2fov, getWorld2View2
 
 from fast_gs.Config.config import ModelParams
@@ -90,7 +88,6 @@ class ViewpointAdapter:
         self.width = self.image_width
         self.height = self.image_height
 
-        # 供 camera_to_JSON 使用：fast-gs 约定 Rt = [R.T | T]，即 view 的旋转为 R.T
         self.R = w2c[:3, :3].T.cpu().numpy()
         self.T = w2c[:3, 3].cpu().numpy()
         self.uid = id(cam)
@@ -148,12 +145,6 @@ class Scene:
         self.cameras_extent = _cameras_extent_from_list(colmap_cameras)
         if shuffle:
             random.shuffle(self.train_cameras)
-        if not self.loaded_iter:
-            json_cams = []
-            for id, cam in enumerate(self.train_cameras):
-                json_cams.append(camera_to_JSON(id, cam))
-            with open(os.path.join(self.model_path, "cameras.json"), 'w') as file:
-                json.dump(json_cams, file)
 
         self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 

@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 from scene.cameras import Camera
 from utils.general_utils import PILtoTorch
-from utils.graphics_utils import fov2focal
 
 
 def _load_cam_preprocess(args, id, cam_info):
@@ -48,25 +47,3 @@ def cameraList_from_camInfos(cam_infos, args):
         for p in tqdm(preprocessed, desc="Loading cameras (to GPU)")
     ]
     return camera_list
-
-def camera_to_JSON(id, camera : Camera):
-    Rt = np.zeros((4, 4))
-    Rt[:3, :3] = camera.R.transpose()
-    Rt[:3, 3] = camera.T
-    Rt[3, 3] = 1.0
-
-    W2C = np.linalg.inv(Rt)
-    pos = W2C[:3, 3]
-    rot = W2C[:3, :3]
-    serializable_array_2d = [x.tolist() for x in rot]
-    camera_entry = {
-        'id' : id,
-        'img_name' : camera.image_name,
-        'width' : camera.width,
-        'height' : camera.height,
-        'position': pos.tolist(),
-        'rotation': serializable_array_2d,
-        'fy' : fov2focal(camera.FovY, camera.height),
-        'fx' : fov2focal(camera.FovX, camera.width)
-    }
-    return camera_entry
