@@ -8,7 +8,7 @@ class BasicPointCloud(NamedTuple):
     colors : np.array
     normals : np.array
 
-def getProjectionMatrix(znear, zfar, fovX, fovY):
+def getProjectionMatrix(fovX, fovY, znear: float=0.01, zfar: float=100.0):
     tanHalfFovY = math.tan((fovY / 2))
     tanHalfFovX = math.tan((fovX / 2))
 
