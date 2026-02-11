@@ -1,6 +1,4 @@
-import numpy as np
 from tqdm import tqdm
-
 from concurrent.futures import ThreadPoolExecutor
 
 from scene.cameras import Camera

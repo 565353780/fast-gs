@@ -14,7 +14,7 @@ from camera_control.Module.camera_convertor import CameraConvertor
 from camera_control.Module.camera import Camera
 
 from scene.dataset_readers import readColmapSceneInfo
-from utils.graphics_utils import getProjectionMatrix, focal2fov, getWorld2View2
+from utils.graphics_utils import getProjectionMatrix, focal2fov, getWorld2View
 
 from fast_gs.Config.config import ModelParams
 from fast_gs.Model.gs import GaussianModel
@@ -92,13 +92,13 @@ class ViewpointAdapter:
         self.T = w2c[:3, 3].cpu().numpy()
         self.uid = id(cam)
 
-        # 投影矩阵（与 utils.graphics_utils.getWorld2View2 及 scene/cameras.py Camera 一致）
-        # getWorld2View2(R,T) 构造 Rt[:3,:3]=R.T、Rt[:3,3]=T，即 W2C；此处 self.R=w2c[:3,:3].T 故得到 w2c
-        self.world_view_transform = torch.tensor(getWorld2View2(self.R, self.T)).transpose(0, 1).cuda()
+        # 投影矩阵（与 utils.graphics_utils.getWorld2View 及 scene/cameras.py Camera 一致）
+        # getWorld2View(R,T) 构造 Rt[:3,:3]=R.T、Rt[:3,3]=T，即 W2C；此处 self.R=w2c[:3,:3].T 故得到 w2c
+        self.world_view_transform = torch.tensor(getWorld2View(self.R, self.T)).transpose(0, 1).cuda()
         self.projection_matrix = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=self.FoVx, fovY=self.FoVy).transpose(0, 1).cuda()
         self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
-        # 用 NumPy 求 C2W 的平移，避免 torch.inverse() 的 lazy wrapper 报错
-        w2c_np = getWorld2View2(self.R, self.T)
+
+        w2c_np = getWorld2View(self.R, self.T)
         c2w_np = np.linalg.inv(w2c_np)
         self.camera_center = torch.tensor(c2w_np[:3, 3], dtype=torch.float32).cuda()
         return
