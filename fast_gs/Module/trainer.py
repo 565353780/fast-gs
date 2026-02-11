@@ -5,23 +5,23 @@ import torch
 from torch import nn
 from tqdm import tqdm
 from typing import Tuple
-
-from lpipsPyTorch import lpips
-from fused_ssim import fused_ssim as fast_ssim
-
 from argparse import ArgumentParser
+
+from fused_ssim import fused_ssim
+
 from utils.general_utils import safe_state
 from utils.fast_utils import compute_gaussian_score_fastgs, sampling_cameras
-from gaussian_renderer import render_fastgs
 
 from base_trainer.Module.logger import Logger
 from base_trainer.Module.base_trainer import BaseTrainer
 
 from fast_gs.Config.config import ModelParams, PipelineParams, OptimizationParams
+from fast_gs.Lib.lpipsPyTorch import lpips
 from fast_gs.Loss.l1 import l1_loss
 from fast_gs.Metric.psnr import psnr
 from fast_gs.Dataset.scene import Scene
 from fast_gs.Model.gs import GaussianModel
+from fast_gs.Method.render_kernel import render_fastgs
 
 
 class Trainer(object):
@@ -97,7 +97,7 @@ class Trainer(object):
 
         gt_image = viewpoint_cam.original_image.cuda()
         rgb_loss = l1_loss(image, gt_image)
-        ssim_loss = 1.0 - fast_ssim(image.unsqueeze(0), gt_image.unsqueeze(0))
+        ssim_loss = 1.0 - fused_ssim(image.unsqueeze(0), gt_image.unsqueeze(0))
 
         opacity_loss = torch.zeros([1], dtype=rgb_loss.dtype).to(rgb_loss.device)
         if lambda_opacity > 0 and iteration < self.opt.densify_until_iter:
@@ -163,7 +163,7 @@ class Trainer(object):
 
                     l1_test += l1_loss(image, gt_image).mean().double()
                     psnr_test += psnr(image, gt_image).mean().double()
-                    ssim_test += fast_ssim(image.unsqueeze(0), gt_image.unsqueeze(0)).mean().double()
+                    ssim_test += fused_ssim(image.unsqueeze(0), gt_image.unsqueeze(0)).mean().double()
                     lpips_test += lpips(image, gt_image, net_type='vgg').mean().double()
 
                 psnr_test /= len(config['cameras'])

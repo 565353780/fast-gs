@@ -13,11 +13,11 @@ from tqdm import tqdm
 from camera_control.Module.camera_convertor import CameraConvertor
 from camera_control.Module.camera import Camera
 
-from scene.dataset_readers import readColmapSceneInfo
 from utils.graphics_utils import getProjectionMatrix, focal2fov, getWorld2View
 
 from fast_gs.Config.config import ModelParams
 from fast_gs.Model.gs import GaussianModel
+from fast_gs.Method.colmap_io import readColmapPcd
 
 
 def _cameras_extent_from_list(cam_list):
@@ -131,7 +131,7 @@ class Scene:
         if shuffle:
             random.shuffle(self.train_cameras)
 
-        pcd = readColmapSceneInfo(args.source_path)
+        pcd = readColmapPcd(args.source_path)
         self.gaussians.create_from_pcd(pcd, self.cameras_extent)
 
     def save(self, iteration):

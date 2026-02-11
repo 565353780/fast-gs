@@ -14,5 +14,5 @@ python setup.py install
 cd ../fused-ssim
 python setup.py install
 
-cd ../fast-gs/submodules/diff-gaussian-rasterization_fastgs
+cd ../fast-gs/fast_gs/Lib/diff-gaussian-rasterization_fastgs
 python setup.py install
