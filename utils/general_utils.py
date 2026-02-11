@@ -1,19 +1,10 @@
-#
-# Copyright (C) 2023, Inria
-# GRAPHDECO research group, https://team.inria.fr/graphdeco
-# All rights reserved.
-#
-# This software is free for non-commercial, research and evaluation use 
-# under the terms of the LICENSE.md file.
-#
-# For inquiries contact  george.drettakis@inria.fr
-#
-
-import torch
 import sys
-from datetime import datetime
-import numpy as np
+import torch
 import random
+import numpy as np
+
+from datetime import datetime
+
 
 def identity_gate(x):
     return x
@@ -21,9 +12,8 @@ def identity_gate(x):
 def inverse_sigmoid(x):
     return torch.log(x/(1-x))
 
-def PILtoTorch(pil_image, resolution):
-    resized_image_PIL = pil_image.resize(resolution)
-    resized_image = torch.from_numpy(np.array(resized_image_PIL)) / 255.0
+def PILtoTorch(pil_image):
+    resized_image = torch.from_numpy(np.array(pil_image)) / 255.0
     if len(resized_image.shape) == 3:
         return resized_image.permute(2, 0, 1)
     else:

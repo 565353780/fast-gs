@@ -29,8 +29,6 @@ class Scene:
                 self.loaded_iter = load_iteration
             print("Loading trained model at iteration {}".format(self.loaded_iter))
 
-        self.train_cameras = []
-
         scene_info = readColmapSceneInfo(args.source_path, args.images)
 
         if not self.loaded_iter:
@@ -47,7 +45,7 @@ class Scene:
 
         self.cameras_extent = scene_info.nerf_normalization["radius"]
 
-        self.train_cameras = cameraList_from_camInfos(scene_info.train_cameras, 1, args)
+        self.train_cameras = cameraList_from_camInfos(scene_info.train_cameras, args)
 
         if self.loaded_iter:
             self.gaussians.load_ply(os.path.join(self.model_path,
