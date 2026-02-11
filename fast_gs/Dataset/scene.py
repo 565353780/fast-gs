@@ -16,7 +16,7 @@ from camera_control.Module.camera import Camera
 from fast_gs.Config.config import ModelParams
 from fast_gs.Model.gs import GaussianModel
 from fast_gs.Method.colmap_io import readColmapPcd
-from fast_gs.Method.graphics_utils import getProjectionMatrix, focal2fov, getWorld2View
+from fast_gs.Method.graphics_utils import getProjectionMatrix, focal2fov
 
 
 def _cameras_extent_from_list(cam_list):
@@ -36,7 +36,7 @@ def _cameras_extent_from_list(cam_list):
     return diagonal * 1.1
 
 
-class ViewpointAdapter:
+class GSCamera:
     """
     将 camera_control.Camera（自带 image/mask、world2camera）适配为 fast-gs 渲染与训练
     所需的 viewpoint 接口：world_view_transform, full_proj_transform, camera_center,
@@ -49,10 +49,6 @@ class ViewpointAdapter:
         self._cam = cam
 
         self.uid = id(cam)
-
-        w2c = cam.world2cameraColmap.float()
-        self.R = w2c[:3, :3].T.cpu().numpy()
-        self.T = w2c[:3, 3].cpu().numpy()
 
         self.FoVx = float(focal2fov(cam.fx, cam.width))
         self.FoVy = float(focal2fov(cam.fy, cam.height))
@@ -81,15 +77,11 @@ class ViewpointAdapter:
         self.original_image = img.clamp(0.0, 1.0).to(data_device)
         self.image_name = cam.image_id
 
-        # 投影矩阵（与 utils.graphics_utils.getWorld2View 及 scene/cameras.py Camera 一致）
-        # getWorld2View(R,T) 构造 Rt[:3,:3]=R.T、Rt[:3,3]=T，即 W2C；此处 self.R=w2c[:3,:3].T 故得到 w2c
-        self.world_view_transform = torch.tensor(getWorld2View(self.R, self.T)).transpose(0, 1).cuda()
+        self.world_view_transform = cam.world2cameraColmap.transpose(0, 1).cuda()
         self.projection_matrix = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=self.FoVx, fovY=self.FoVy).transpose(0, 1).cuda()
         self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
 
-        w2c_np = getWorld2View(self.R, self.T)
-        c2w_np = np.linalg.inv(w2c_np)
-        self.camera_center = torch.tensor(c2w_np[:3, 3], dtype=torch.float32).cuda()
+        self.camera_center = cam.camera2worldColmap[:3, 3].cuda()
         return
 
 class Scene:
@@ -97,11 +89,6 @@ class Scene:
     gaussians : GaussianModel
 
     def __init__(self, args : ModelParams, gaussians : GaussianModel, shuffle=True):
-        """
-        :param path: Path to colmap scene main folder.
-        优先使用 CameraConvertor.loadColmapDataFolder 得到自带 image/mask 的 List[Camera]，
-        训练时通过 camera 的变换矩阵和 image 直接用于高斯训练。
-        """
         self.model_path = args.model_path
         self.gaussians = gaussians
 
@@ -110,17 +97,17 @@ class Scene:
         mask_folder = os.path.join(args.source_path, 'masks')
         data_device = getattr(args, 'data_device', 'cuda')
         n_cams = len(colmap_cameras)
-        self.train_cameras: List[ViewpointAdapter] = [None] * n_cams
+        self.train_cameras: List[GSCamera] = [None] * n_cams
         with ThreadPoolExecutor(max_workers=min(8, n_cams)) as executor:
             futures = {
                 executor.submit(
-                    ViewpointAdapter, c,
+                    GSCamera, c,
                     data_device=data_device,
                     mask_folder=mask_folder,
                 ): i
                 for i, c in enumerate(colmap_cameras)
             }
-            with tqdm(total=n_cams, desc="Loading viewpoints", unit="cam") as pbar:
+            with tqdm(total=n_cams, desc="Loading GSCamera") as pbar:
                 for fut in as_completed(futures):
                     idx = futures[fut]
                     self.train_cameras[idx] = fut.result()
