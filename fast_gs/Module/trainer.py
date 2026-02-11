@@ -9,9 +9,6 @@ from argparse import ArgumentParser
 
 from fused_ssim import fused_ssim
 
-from utils.general_utils import safe_state
-from utils.fast_utils import compute_gaussian_score_fastgs, sampling_cameras
-
 from base_trainer.Module.logger import Logger
 from base_trainer.Module.base_trainer import BaseTrainer
 
@@ -21,7 +18,9 @@ from fast_gs.Loss.l1 import l1_loss
 from fast_gs.Metric.psnr import psnr
 from fast_gs.Dataset.scene import Scene
 from fast_gs.Model.gs import GaussianModel
+from fast_gs.Method.general_utils import safe_state
 from fast_gs.Method.render_kernel import render_fastgs
+from fast_gs.Method.fast_utils import compute_gaussian_score_fastgs, sampling_cameras
 
 
 class Trainer(object):

@@ -13,11 +13,10 @@ from tqdm import tqdm
 from camera_control.Module.camera_convertor import CameraConvertor
 from camera_control.Module.camera import Camera
 
-from utils.graphics_utils import getProjectionMatrix, focal2fov, getWorld2View
-
 from fast_gs.Config.config import ModelParams
 from fast_gs.Model.gs import GaussianModel
 from fast_gs.Method.colmap_io import readColmapPcd
+from fast_gs.Method.graphics_utils import getProjectionMatrix, focal2fov, getWorld2View
 
 
 def _cameras_extent_from_list(cam_list):

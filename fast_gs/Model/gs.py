@@ -7,11 +7,16 @@ from plyfile import PlyData, PlyElement
 
 from simple_knn._C import distCUDA2
 
-from utils.graphics_utils import BasicPointCloud
-from utils.general_utils import strip_symmetric, build_scaling_rotation
-from utils.general_utils import inverse_sigmoid, get_expon_lr_func, build_rotation, identity_gate
-
 from fast_gs.Method.sh_utils import RGB2SH
+from fast_gs.Method.graphics_utils import BasicPointCloud
+from fast_gs.Method.general_utils import (
+    strip_symmetric,
+    build_scaling_rotation,
+    inverse_sigmoid,
+    get_expon_lr_func,
+    build_rotation,
+    identity_gate,
+)
 
 class GaussianModel:
 

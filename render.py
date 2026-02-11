@@ -1,14 +1,3 @@
-#
-# Copyright (C) 2023, Inria
-# GRAPHDECO research group, https://team.inria.fr/graphdeco
-# All rights reserved.
-#
-# This software is free for non-commercial, research and evaluation use 
-# under the terms of the LICENSE.md file.
-#
-# For inquiries contact  george.drettakis@inria.fr
-#
-
 import torch
 from scene import Scene
 import os
@@ -16,11 +5,12 @@ from tqdm import tqdm
 from os import makedirs
 from gaussian_renderer import render_fastgs
 import torchvision
-from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel
 import time
+
+from fast_gs.Method.general_utils import safe_state
 
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, args):

@@ -4,7 +4,7 @@ import numpy as np
 
 from plyfile import PlyData, PlyElement
 
-from utils.graphics_utils import BasicPointCloud
+from fast_gs.Method.graphics_utils import BasicPointCloud
 
 
 def read_next_bytes(fid, num_bytes, format_char_sequence, endian_character="<"):
