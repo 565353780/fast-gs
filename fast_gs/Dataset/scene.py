@@ -37,8 +37,9 @@ def _cameras_extent_from_list(cam_list):
 
 
 class GSCamera:
-    def __init__(self, cam: Camera, data_device: str = "cuda"):
+    def __init__(self, cam: Camera, data_device: str = "cuda:0"):
         self._cam = cam
+        self._cam.to(torch.float32, data_device)
 
         self.uid = id(cam)
 
