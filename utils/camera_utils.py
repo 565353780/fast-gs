@@ -25,16 +25,6 @@ def _load_cam_preprocess(args, id, cam_info):
         "data_device": args.data_device,
     }
 
-def loadCam(args, id, cam_info):
-    pre = _load_cam_preprocess(args, id, cam_info)
-    return Camera(
-        colmap_id=pre["colmap_id"], R=pre["R"], T=pre["T"],
-        FoVx=pre["FoVx"], FoVy=pre["FoVy"],
-        image=pre["gt_image"], gt_alpha_mask=pre["gt_alpha_mask"],
-        image_name=pre["image_name"], uid=pre["id"], data_device=pre["data_device"],
-    )
-
-
 def cameraList_from_camInfos(cam_infos, args):
     items = list(enumerate(cam_infos))
     # 阶段一：多线程仅在 CPU 上预处理图像，不触碰 CUDA
