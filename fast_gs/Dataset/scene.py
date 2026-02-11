@@ -49,21 +49,17 @@ class ViewpointAdapter:
     def __init__(self, cam: Camera, data_device: str = "cuda", mask_folder: Optional[str] = None):
         self._cam = cam
 
-        # 高斯训练与 readColmapCameras 一致：使用 COLMAP 约定的 w2c（无 Y/Z 翻转），
-        # 即 Camera 的 world2cameraColmap，而非 setColmapPose 写入的 world2camera（内部约定）。
-        w2c = cam.world2cameraColmap
-        if torch.is_tensor(w2c):
-            w2c = w2c.float()
-        else:
-            w2c = torch.tensor(w2c, dtype=torch.float32)
+        self.uid = id(cam)
 
-        # FoV 从内参计算
+        w2c = cam.world2cameraColmap.float()
+        self.R = w2c[:3, :3].T.cpu().numpy()
+        self.T = w2c[:3, 3].cpu().numpy()
+
         self.FoVx = float(focal2fov(cam.fx, cam.width))
         self.FoVy = float(focal2fov(cam.fy, cam.height))
-        self.FovX = self.FoVx
-        self.FovY = self.FoVy
-        self.image_width = int(cam.width)
-        self.image_height = int(cam.height)
+
+        self.image_width = cam.width
+        self.image_height = cam.height
 
         # 图像：(H, W, 3) -> (3, H, W)，并应用 mask（若有）
         img = cam.image.float().permute(2, 0, 1)
@@ -85,12 +81,6 @@ class ViewpointAdapter:
 
         self.original_image = img.clamp(0.0, 1.0).to(data_device)
         self.image_name = cam.image_id
-        self.width = self.image_width
-        self.height = self.image_height
-
-        self.R = w2c[:3, :3].T.cpu().numpy()
-        self.T = w2c[:3, 3].cpu().numpy()
-        self.uid = id(cam)
 
         # 投影矩阵（与 utils.graphics_utils.getWorld2View 及 scene/cameras.py Camera 一致）
         # getWorld2View(R,T) 构造 Rt[:3,:3]=R.T、Rt[:3,3]=T，即 W2C；此处 self.R=w2c[:3,:3].T 故得到 w2c
@@ -114,14 +104,9 @@ class Scene:
         训练时通过 camera 的变换矩阵和 image 直接用于高斯训练。
         """
         self.model_path = args.model_path
-        self.loaded_iter = None
         self.gaussians = gaussians
 
-        scene_info = readColmapSceneInfo(args.source_path, args.images)
-
-        colmap_cameras = CameraConvertor.loadColmapDataFolder(
-            args.source_path,
-        )
+        colmap_cameras = CameraConvertor.loadColmapDataFolder(args.source_path)
 
         mask_folder = os.path.join(args.source_path, 'masks')
         data_device = getattr(args, 'data_device', 'cuda')
@@ -146,7 +131,8 @@ class Scene:
         if shuffle:
             random.shuffle(self.train_cameras)
 
-        self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
+        pcd = readColmapSceneInfo(args.source_path)
+        self.gaussians.create_from_pcd(pcd, self.cameras_extent)
 
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))
