@@ -47,6 +47,26 @@ class Scene:
 
         self.train_cameras = cameraList_from_camInfos(scene_info.train_cameras, args)
 
+        test_cam = self.train_cameras[0]
+        print('fov:', test_cam.FoVx, test_cam.FoVy)
+        print('image:', test_cam.image_name, test_cam.image_width, test_cam.image_height)
+        print('pose:')
+        print(test_cam.R)
+        print(test_cam.T)
+        print('transform:')
+        print(test_cam.world_view_transform)
+        print(test_cam.projection_matrix)
+        print(test_cam.full_proj_transform)
+        print('camera_center:', test_cam.camera_center)
+
+        import cv2
+        import numpy as np
+        # original_image: (3, H, W), RGB, 0-1, CUDA tensor
+        # Convert to (H, W, 3), uint8, BGR for cv2.imwrite
+        image = (test_cam.original_image.clamp(0, 1).cpu().numpy().transpose(1, 2, 0) * 255.0).astype(np.uint8)
+        image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(os.path.join(self.model_path, 'scene_image.png'), image_bgr)
+
         if self.loaded_iter:
             self.gaussians.load_ply(os.path.join(self.model_path,
                                                            "point_cloud",

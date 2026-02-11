@@ -21,6 +21,7 @@ from fast_gs.Config.config import ModelParams, PipelineParams, OptimizationParam
 from fast_gs.Loss.l1 import l1_loss
 from fast_gs.Metric.psnr import psnr
 from fast_gs.Dataset.scene import Scene
+from fast_gs.Dataset.scene_v2 import Scene as SceneV2
 from fast_gs.Model.gs import GaussianModel
 
 
@@ -66,6 +67,8 @@ class Trainer(object):
 
         self.gaussians = GaussianModel(self.dataset.sh_degree)
         self.scene = Scene(self.dataset, self.gaussians)
+        self.scene_v2 = SceneV2(self.dataset, self.gaussians)
+        exit()
         self.gaussians.training_setup(self.opt)
 
         bg_color = [1, 1, 1] if self.dataset.white_background else [0, 0, 0]

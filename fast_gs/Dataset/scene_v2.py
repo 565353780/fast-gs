@@ -1,0 +1,189 @@
+import sys
+sys.path.append('../../../camera-control/')
+
+import os
+import json
+import torch
+import random
+import numpy as np
+
+from typing import Optional, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from tqdm import tqdm
+from camera_control.Module.camera_convertor import CameraConvertor
+from camera_control.Module.camera import Camera
+
+from scene.dataset_readers import readColmapSceneInfo
+from utils.camera_utils import camera_to_JSON
+from utils.graphics_utils import getProjectionMatrix, focal2fov, getWorld2View2
+
+from fast_gs.Config.config import ModelParams
+from fast_gs.Model.gs import GaussianModel
+
+
+def _cameras_extent_from_list(cam_list):
+    """从 camera_control Camera 列表计算 cameras_extent (radius)。"""
+    if not cam_list:
+        return 1.0
+    centers = []
+    for c in cam_list:
+        pos = c.pos
+        if torch.is_tensor(pos):
+            pos = pos.detach().cpu().numpy()
+        centers.append(pos.reshape(3, 1))
+    centers = np.hstack(centers)
+    center = np.mean(centers, axis=1, keepdims=True)
+    dist = np.linalg.norm(centers - center, axis=0, keepdims=True)
+    diagonal = float(np.max(dist))
+    return diagonal * 1.1
+
+
+class ViewpointAdapter:
+    """
+    将 camera_control.Camera（自带 image/mask、world2camera）适配为 fast-gs 渲染与训练
+    所需的 viewpoint 接口：world_view_transform, full_proj_transform, camera_center,
+    FoVx, FoVy, image_width, image_height, original_image, image_name, R, T 等。
+    """
+    znear = 0.01
+    zfar = 100.0
+
+    def __init__(self, cam: Camera, data_device: str = "cuda", mask_folder: Optional[str] = None):
+        self._cam = cam
+
+        # 高斯训练与 readColmapCameras 一致：使用 COLMAP 约定的 w2c（无 Y/Z 翻转），
+        # 即 Camera 的 world2cameraColmap，而非 setColmapPose 写入的 world2camera（内部约定）。
+        w2c = cam.world2cameraColmap
+        if torch.is_tensor(w2c):
+            w2c = w2c.float()
+        else:
+            w2c = torch.tensor(w2c, dtype=torch.float32)
+
+        # FoV 从内参计算
+        self.FoVx = float(focal2fov(cam.fx, cam.width))
+        self.FoVy = float(focal2fov(cam.fy, cam.height))
+        self.FovX = self.FoVx
+        self.FovY = self.FoVy
+        self.image_width = int(cam.width)
+        self.image_height = int(cam.height)
+
+        # 图像：(H, W, 3) -> (3, H, W)，并应用 mask（若有）
+        img = cam.image.float().permute(2, 0, 1)
+
+        # 可选：从 mask 文件夹加载并应用
+        if mask_folder and os.path.isdir(mask_folder):
+            base = cam.image_id if hasattr(cam, 'image_id') else None
+            if base:
+                for ext in ('', '.png', '.jpg', '.jpeg'):
+                    name = base if base.endswith(('.png', '.jpg', '.jpeg')) else base + ext
+                    mask_path = os.path.join(mask_folder, os.path.basename(name))
+                    if os.path.isfile(mask_path):
+                        cam.loadMaskFile(mask_path)
+                        break
+
+        if cam.mask is not None:
+            mask = cam.mask.unsqueeze(0).float()
+            img = img * mask
+
+        self.original_image = img.clamp(0.0, 1.0).to(data_device)
+        self.image_name = cam.image_id
+        self.width = self.image_width
+        self.height = self.image_height
+
+        # 供 camera_to_JSON 使用：fast-gs 约定 Rt = [R.T | T]，即 view 的旋转为 R.T
+        self.R = w2c[:3, :3].T.cpu().numpy()
+        self.T = w2c[:3, 3].cpu().numpy()
+        self.uid = id(cam)
+
+        # 投影矩阵（与 utils.graphics_utils.getWorld2View2 及 scene/cameras.py Camera 一致）
+        # getWorld2View2(R,T) 构造 Rt[:3,:3]=R.T、Rt[:3,3]=T，即 W2C；此处 self.R=w2c[:3,:3].T 故得到 w2c
+        self.world_view_transform = torch.tensor(getWorld2View2(self.R, self.T)).transpose(0, 1).cuda()
+        self.projection_matrix = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=self.FoVx, fovY=self.FoVy).transpose(0, 1).cuda()
+        self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
+        # 用 NumPy 求 C2W 的平移，避免 torch.inverse() 的 lazy wrapper 报错
+        w2c_np = getWorld2View2(self.R, self.T)
+        c2w_np = np.linalg.inv(w2c_np)
+        self.camera_center = torch.tensor(c2w_np[:3, 3], dtype=torch.float32).cuda()
+        return
+
+class Scene:
+
+    gaussians : GaussianModel
+
+    def __init__(self, args : ModelParams, gaussians : GaussianModel, shuffle=True):
+        """
+        :param path: Path to colmap scene main folder.
+        优先使用 CameraConvertor.loadColmapDataFolder 得到自带 image/mask 的 List[Camera]，
+        训练时通过 camera 的变换矩阵和 image 直接用于高斯训练。
+        """
+        self.model_path = args.model_path
+        self.loaded_iter = None
+        self.gaussians = gaussians
+
+        scene_info = readColmapSceneInfo(args.source_path, args.images)
+
+        colmap_cameras = CameraConvertor.loadColmapDataFolder(
+            args.source_path,
+        )
+
+        mask_folder = os.path.join(args.source_path, 'masks')
+        data_device = getattr(args, 'data_device', 'cuda')
+        n_cams = len(colmap_cameras)
+        self.train_cameras: List[ViewpointAdapter] = [None] * n_cams
+        with ThreadPoolExecutor(max_workers=min(8, n_cams)) as executor:
+            futures = {
+                executor.submit(
+                    ViewpointAdapter, c,
+                    data_device=data_device,
+                    mask_folder=mask_folder,
+                ): i
+                for i, c in enumerate(colmap_cameras)
+            }
+            with tqdm(total=n_cams, desc="Loading viewpoints", unit="cam") as pbar:
+                for fut in as_completed(futures):
+                    idx = futures[fut]
+                    self.train_cameras[idx] = fut.result()
+                    pbar.update(1)
+
+        test_cam = self.train_cameras[0]
+        print('fov:', test_cam.FovX, test_cam.FovY)
+        print('image:', test_cam.image_name, test_cam.image_width, test_cam.image_height)
+        print('pose:')
+        print(test_cam.R)
+        print(test_cam.T)
+        print('transform:')
+        print(test_cam.world_view_transform)
+        print(test_cam.projection_matrix)
+        print(test_cam.full_proj_transform)
+        print('camera_center:', test_cam.camera_center)
+
+        import cv2
+        import numpy as np
+        # original_image: (3, H, W), RGB, 0-1, CUDA tensor
+        # Convert to (H, W, 3), uint8, BGR for cv2.imwrite
+        image = (test_cam.original_image.clamp(0, 1).cpu().numpy().transpose(1, 2, 0) * 255.0).astype(np.uint8)
+        image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(os.path.join(self.model_path, 'scene_v2_image.png'), image_bgr)
+
+        self.cameras_extent = _cameras_extent_from_list(colmap_cameras)
+        if shuffle:
+            random.shuffle(self.train_cameras)
+        if not self.loaded_iter:
+            json_cams = []
+            for id, cam in enumerate(self.train_cameras):
+                json_cams.append(camera_to_JSON(id, cam))
+            with open(os.path.join(self.model_path, "cameras.json"), 'w') as file:
+                json.dump(json_cams, file)
+
+        self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
+
+    def save(self, iteration):
+        point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))
+        self.gaussians.save_ply(os.path.join(point_cloud_path, "point_cloud.ply"))
+
+    def __len__(self) -> int:
+        return len(self.train_cameras)
+
+    def __getitem__(self, idx: int):
+        valid_idx = idx % len(self.train_cameras)
+        return self.train_cameras[valid_idx]
