@@ -92,7 +92,7 @@ class FCTrainer(object):
         assert os.path.exists(init_mesh_file_path)
         self.fc_params = FCConvertor.createFC(
             init_mesh_file_path,
-            resolution=128,
+            resolution=32,
             device=self.device,
         )
 
@@ -117,6 +117,9 @@ class FCTrainer(object):
         self.logger = Logger()
 
         BaseTrainer.initRecords(self)
+
+        # tmp
+        self.is_gt_logged = False
         return
 
     def renderImage(self, viewpoint_cam) -> dict:
@@ -157,34 +160,44 @@ class FCTrainer(object):
         if lambda_scaling > 0 and iteration < self.opt.densify_until_iter:
             scaling_loss = nn.MSELoss()(self.gaussians.get_scaling, torch.zeros_like(self.gaussians._scaling))
 
-        fc_mesh, vertices, L_dev = self.extractMesh()
-        '''
-        fc_depth = NVDiffRastRenderer.renderDepth(
-            fc_mesh,
-            viewpoint_cam._cam,
-            vertices_tensor=vertices,
-        )['depth']
-        '''
-
-        dists1, dists2 = self.chamfer_func(
-            vertices.unsqueeze(0),
-            self.gaussians.get_xyz.unsqueeze(0),
-        )[:2]
-
-        chamfer_loss = dists1.mean() + dists2.mean()
-
         # FlexiCubes developability 正则化损失
-        dev_loss = L_dev.mean() if L_dev is not None and L_dev.numel() > 0 else torch.tensor(0.0, device=self.device)
+        dev_loss = torch.tensor(0.0, device=self.device)
+        chamfer_loss = torch.tensor(0.0, device=self.device)
+        if iteration % 100 == 0:
+            fc_mesh, vertices, L_dev = self.extractMesh()
 
-        faces = torch.from_numpy(fc_mesh.faces).long().to(self.device)
-        if self.E_thinplate_base is None:
-            with torch.no_grad():
-                V0 = torch.from_numpy(fc_mesh.vertices).float().to(self.device)
-                self.E_thinplate_base = thin_plate_energy(V0, faces)
+            if iteration == 1:
+                fc_mesh.export(self.save_result_folder_path + 'start_fc_mesh.ply')
 
-            fc_mesh.export(self.save_result_folder_path + 'start_fc_mesh.ply')
+            '''
+            fc_depth = NVDiffRastRenderer.renderDepth(
+                fc_mesh,
+                viewpoint_cam._cam,
+                vertices_tensor=vertices,
+            )['depth']
+            '''
 
-        thinplate_loss = thin_plate_energy(vertices, faces, factor=self.E_thinplate_base)
+            if L_dev is not None and L_dev.numel() > 0:
+                dev_loss = L_dev.mean()
+
+            dists1, dists2 = self.chamfer_func(
+                vertices.unsqueeze(0),
+                self.gaussians.get_xyz.unsqueeze(0),
+            )[:2]
+
+            chamfer_loss = dists1.mean() + dists2.mean()
+
+            '''
+            faces = torch.from_numpy(fc_mesh.faces).long().to(self.device)
+            if self.E_thinplate_base is None:
+                with torch.no_grad():
+                    V0 = torch.from_numpy(fc_mesh.vertices).float().to(self.device)
+                    self.E_thinplate_base = thin_plate_energy(V0, faces)
+
+                fc_mesh.export(self.save_result_folder_path + 'start_fc_mesh.ply')
+
+            thinplate_loss = thin_plate_energy(vertices, faces, factor=self.E_thinplate_base)
+            '''
 
         total_loss = \
             (1.0 - lambda_dssim) * rgb_loss + \
@@ -192,10 +205,14 @@ class FCTrainer(object):
             lambda_opacity * opacity_loss + \
             lambda_scaling * scaling_loss + \
             lambda_chamfer * chamfer_loss + \
-            lambda_dev * dev_loss + \
-            lambda_thin_plate * thinplate_loss
+            lambda_dev * dev_loss# + \
+            #lambda_thin_plate * thinplate_loss
 
         total_loss.backward()
+
+        if iteration % 100 == 0:
+            self.fc_optimizer.step()
+            self.fc_optimizer.zero_grad()
 
         loss_dict = {
             'rgb': rgb_loss.item(),
@@ -204,7 +221,7 @@ class FCTrainer(object):
             'scaling': scaling_loss.item(),
             'chamfer': chamfer_loss.item(),
             'dev': dev_loss.item(),
-            'thinplate': thinplate_loss.item(),
+            #'thinplate': thinplate_loss.item(),
             'total': total_loss.item(),
         }
 
@@ -230,11 +247,16 @@ class FCTrainer(object):
                     render_pkg = self.renderImage(viewpoint)
                     image = torch.clamp(render_pkg["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
+
+                    fc_mesh = self.extractMesh()[0]
+                    normal_image = torch.clamp(NVDiffRastRenderer.renderNormal(fc_mesh, viewpoint._cam)['normal_camera'], 0.0, 1.0).permute(2, 0, 1)
                     if self.logger.isValid() and (idx < 5):
                         self.logger.summary_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
+                        self.logger.summary_writer.add_images(config['name'] + "_view_{}/fc_normal".format(viewpoint.image_name), normal_image[None], global_step=iteration)
 
-                        if iteration == 1:
+                        if not self.is_gt_logged:
                             self.logger.summary_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
+                            self.is_gt_logged = True
 
                     l1_test += l1_loss(image, gt_image).mean().double()
                     psnr_test += psnr(image, gt_image).mean().double()
@@ -269,7 +291,7 @@ class FCTrainer(object):
         camlist = sampling_cameras(my_viewpoint_stack)
 
         # The multiview consistent densification of fastgs
-        importance_score, pruning_score = compute_gaussian_score_fastgs(camlist, self.gaussians, self.pipe, self.background, self.opt, DENSIFY=True)                    
+        importance_score, pruning_score = compute_gaussian_score_fastgs(camlist, self.gaussians, self.pipe, self.background, self.opt, DENSIFY=True)
         self.gaussians.densify_and_prune_fastgs(
             max_screen_size = size_threshold,
             min_opacity = 0.005,
@@ -304,6 +326,8 @@ class FCTrainer(object):
     def saveScene(self, iteration: int) -> bool:
         point_cloud_path = os.path.join(self.dataset.model_path, "point_cloud/iteration_{}".format(iteration))
         self.gaussians.save_ply(os.path.join(point_cloud_path, "point_cloud.ply"))
+        fc_mesh = self.extractMesh()[0]
+        fc_mesh.export(os.path.join(point_cloud_path, 'fc_mesh.ply'))
         return True
 
     def train(self, iteration_num: int = 30000):
