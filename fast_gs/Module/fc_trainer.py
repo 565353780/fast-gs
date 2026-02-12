@@ -182,6 +182,8 @@ class FCTrainer(object):
                 V0 = torch.from_numpy(fc_mesh.vertices).float().to(self.device)
                 self.E_thinplate_base = thin_plate_energy(V0, faces)
 
+            fc_mesh.export(self.save_result_folder_path + 'start_fc_mesh.ply')
+
         thinplate_loss = thin_plate_energy(vertices, faces, factor=self.E_thinplate_base)
 
         total_loss = \
