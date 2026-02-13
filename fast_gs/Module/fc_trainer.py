@@ -268,7 +268,7 @@ class FCTrainer(BaseGSTrainer):
                 progress_bar.set_postfix(bar_loss_dict)
                 progress_bar.update(10)
 
-            self.logStep(iteration, loss_dict)
+            self.logStep(iteration, loss_dict, is_fast=True)
 
             if iteration % self.save_freq == 0:
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
