@@ -1,11 +1,12 @@
 import sys
 sys.path.append('../base-trainer')
+sys.path.append('../base-gs-trainer')
 sys.path.append('../camera-control')
 
 import os
 os.environ['CUDA_VISIBLE_DEVICES']='3'
 
-from fast_gs.Method.time import getCurrentTime
+from base_gs_trainer.Method.time import getCurrentTime
 from fast_gs.Module.trainer import Trainer
 
 

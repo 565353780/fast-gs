@@ -7,8 +7,9 @@ from plyfile import PlyData, PlyElement
 
 from simple_knn._C import distCUDA2
 
-from fast_gs.Method.sh_utils import RGB2SH
-from fast_gs.Method.graphics_utils import BasicPointCloud
+from base_gs_trainer.Method.sh_utils import RGB2SH
+from base_gs_trainer.Data.basic_point_cloud import BasicPointCloud
+
 from fast_gs.Method.general_utils import (
     strip_symmetric,
     build_scaling_rotation,

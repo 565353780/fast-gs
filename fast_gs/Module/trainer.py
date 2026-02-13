@@ -1,5 +1,7 @@
 import os
 import sys
+sys.path.append('../../../base-trainer/')
+sys.path.append('../../../base-gs-trainer/')
 import torch
 
 from torch import nn
@@ -12,11 +14,13 @@ from fused_ssim import fused_ssim
 from base_trainer.Module.logger import Logger
 from base_trainer.Module.base_trainer import BaseTrainer
 
+from base_gs_trainer.Dataset.gs_cameras import GSCameras
+from base_gs_trainer.Lib.lpipsPyTorch import lpips
+from base_gs_trainer.Loss.l1 import l1_loss
+from base_gs_trainer.Metric.psnr import psnr
+from base_gs_trainer.Method.colmap_io import readColmapPcd
+
 from fast_gs.Config.config import ModelParams, PipelineParams, OptimizationParams
-from fast_gs.Lib.lpipsPyTorch import lpips
-from fast_gs.Loss.l1 import l1_loss
-from fast_gs.Metric.psnr import psnr
-from fast_gs.Dataset.scene import Scene
 from fast_gs.Model.gs import GaussianModel
 from fast_gs.Method.general_utils import safe_state
 from fast_gs.Method.render_kernel import render_fastgs
@@ -63,8 +67,12 @@ class Trainer(object):
         self.opt = op.extract(args)
         self.pipe = pp.extract(args)
 
+        self.scene = GSCameras(self.dataset.source_path)
         self.gaussians = GaussianModel(self.dataset.sh_degree)
-        self.scene = Scene(self.dataset, self.gaussians)
+
+        pcd = readColmapPcd(args.source_path)
+        self.gaussians.create_from_pcd(pcd, self.scene.cameras_extent)
+
         self.gaussians.training_setup(self.opt)
 
         bg_color = [1, 1, 1] if self.dataset.white_background else [0, 0, 0]

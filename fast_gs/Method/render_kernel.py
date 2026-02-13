@@ -3,8 +3,9 @@ import torch
 
 from diff_gaussian_rasterization_fastgs import GaussianRasterizationSettings, GaussianRasterizer
 
+from base_gs_trainer.Method.sh_utils import eval_sh
+
 from fast_gs.Model.gs import GaussianModel
-from fast_gs.Method.sh_utils import eval_sh
 
 
 def render_fastgs(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, mult, scaling_modifier = 1.0, override_color = None, get_flag=None, metric_map = None):

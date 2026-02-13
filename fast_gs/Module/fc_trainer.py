@@ -90,7 +90,7 @@ class FCTrainer(object):
         assert os.path.exists(init_mesh_file_path)
         self.fc_params = FCConvertor.createFC(
             init_mesh_file_path,
-            resolution=32,
+            resolution=192,
             device=self.device,
         )
 

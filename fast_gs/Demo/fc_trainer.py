@@ -1,5 +1,6 @@
 import sys
 sys.path.append('../base-trainer')
+sys.path.append('../base-gs-trainer')
 sys.path.append('../camera-control')
 sys.path.append('../flexi-cubes')
 sys.path.append('../mv-fc-recon')
