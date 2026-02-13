@@ -1,9 +1,4 @@
 import os
-import sys
-sys.path.append('../../../base-trainer/')
-sys.path.append('../../../camera-control/')
-sys.path.append('../../../flexi-cubes/')
-sys.path.append('../../../mv-fc-recon/')
 import torch
 
 from torch import nn
@@ -48,6 +43,7 @@ class FCTrainer(object):
         device: str='cuda:0',
         test_freq: int=10000,
         save_freq: int=10000,
+        fc_update_freq: int=100,
     ) -> None:
         # 优先设定默认 dtype，避免其他脚本设为 bfloat16 导致类型不匹配
         torch.set_default_dtype(torch.float32)
@@ -58,6 +54,7 @@ class FCTrainer(object):
 
         self.test_freq = test_freq
         self.save_freq = save_freq
+        self.fc_update_freq = fc_update_freq
 
         # Set up command line argument parser
         parser = ArgumentParser(description="Training script parameters")
@@ -163,7 +160,7 @@ class FCTrainer(object):
         # FlexiCubes developability 正则化损失
         dev_loss = torch.tensor(0.0, device=self.device)
         chamfer_loss = torch.tensor(0.0, device=self.device)
-        if iteration % 100 == 0:
+        if iteration % self.fc_update_freq == 0:
             fc_mesh, vertices, L_dev = self.extractMesh()
 
             if iteration == 1:
