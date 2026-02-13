@@ -11,6 +11,7 @@ from argparse import ArgumentParser
 from fused_ssim import fused_ssim
 
 from base_gs_trainer.Loss.l1 import l1_loss
+from base_gs_trainer.Loss.chamfer import chamferLossFn
 from base_gs_trainer.Module.base_gs_trainer import BaseGSTrainer
 
 from camera_control.Module.nvdiffrast_renderer import NVDiffRastRenderer
@@ -18,11 +19,6 @@ from camera_control.Module.nvdiffrast_renderer import NVDiffRastRenderer
 from flexi_cubes.Module.fc_convertor import FCConvertor
 
 from mv_fc_recon.Loss.mesh_geo_energy import thin_plate_energy
-
-if torch.cuda.is_available():
-    from fast_gs.Lib.chamfer3D.dist_chamfer_3D import chamfer_3DDist
-else:
-    from fast_gs.Lib.chamfer3D.chamfer_python import distChamfer
 
 from fast_gs.Config.config import ModelParams, PipelineParams, OptimizationParams
 from fast_gs.Model.gs import GaussianModel
@@ -90,10 +86,7 @@ class FCTrainer(BaseGSTrainer):
 
         self.fc_optimizer = torch.optim.Adam(param_groups)
 
-        if torch.cuda.is_available() and device != "cpu":
-            self.chamfer_func = chamfer_3DDist()
-        else:
-            self.chamfer_func = distChamfer
+        self.chamfer_func = chamferLossFn(self.device)
 
         self.E_thinplate_base = None
         return
