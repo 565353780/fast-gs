@@ -10,6 +10,7 @@ from argparse import ArgumentParser
 
 from fused_ssim import fused_ssim
 
+from base_gs_trainer.Loss.l1 import l1_loss
 from base_gs_trainer.Module.base_gs_trainer import BaseGSTrainer
 
 from camera_control.Module.nvdiffrast_renderer import NVDiffRastRenderer
@@ -24,7 +25,6 @@ else:
     from fast_gs.Lib.chamfer3D.chamfer_python import distChamfer
 
 from fast_gs.Config.config import ModelParams, PipelineParams, OptimizationParams
-from fast_gs.Loss.l1 import l1_loss
 from fast_gs.Model.gs import GaussianModel
 from fast_gs.Method.render_kernel import render_fastgs
 from fast_gs.Method.fast_utils import compute_gaussian_score_fastgs, sampling_cameras
@@ -62,6 +62,16 @@ class FCTrainer(BaseGSTrainer):
 
         self.gaussians = GaussianModel(self.dataset.sh_degree)
 
+        BaseGSTrainer.__init__(
+            self,
+            colmap_data_folder_path=colmap_data_folder_path,
+            device=device,
+            save_result_folder_path=save_result_folder_path,
+            save_log_folder_path=save_log_folder_path,
+            test_freq=test_freq,
+            save_freq=save_freq,
+        )
+
         assert os.path.exists(init_mesh_file_path)
         self.fc_params = FCConvertor.createFC(
             init_mesh_file_path,
@@ -86,16 +96,6 @@ class FCTrainer(BaseGSTrainer):
             self.chamfer_func = distChamfer
 
         self.E_thinplate_base = None
-
-        BaseGSTrainer.__init__(
-            self,
-            colmap_data_folder_path=colmap_data_folder_path,
-            device=device,
-            save_result_folder_path=save_result_folder_path,
-            save_log_folder_path=save_log_folder_path,
-            test_freq=test_freq,
-            save_freq=save_freq,
-        )
         return
 
     def renderImage(self, viewpoint_cam) -> dict:
