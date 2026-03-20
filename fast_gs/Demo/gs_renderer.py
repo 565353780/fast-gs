@@ -72,9 +72,6 @@ def demo():
         new_pos = np.array(target_position) + direction * camera_dist
         fps_camera.setWorldPose(look_at=target_position, pos=new_pos, up=[0, 1, 0])
 
-        uv = fps_camera.project_points_to_uv(target_position)
-        print(f"Camera {i}: target uv = ({uv[0, 0].item():.4f}, {uv[0, 1].item():.4f})")
-
     render_list = GSRenderer.renderCameras(
         gs_ply_file_path,
         fps_camera_list,
@@ -85,12 +82,10 @@ def demo():
     )
 
     for i in range(len(fps_camera_list)):
-        image_name = fps_camera_list[i].image_id
+        camera = fps_camera_list[i]
+        image = render_list[i]['render'].permute(1, 2, 0)
 
-        save_image_file_path = save_render_folder_path + image_name
+        camera.loadImage(image)
 
-        image = (render_list[i]['render'].permute(1, 2, 0).numpy() * 255).astype(np.uint8)
-
-        cv2.imwrite(save_image_file_path, image[..., ::-1])
-
+        cv2.imwrite(save_render_folder_path + camera.image_id, camera.image_cv)
     return True
