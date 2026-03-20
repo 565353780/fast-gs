@@ -7,7 +7,6 @@ import os
 os.environ['CUDA_VISIBLE_DEVICES']='6'
 
 import cv2
-import torch
 import numpy as np
 
 from camera_control.Module.camera_convertor import CameraConvertor
