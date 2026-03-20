@@ -70,7 +70,7 @@ def demo():
             np.cos(phi),
         ])
         new_pos = np.array(target_position) + direction * camera_dist
-        fps_camera.setWorldPose(look_at=target_position, pos=new_pos, up=[0, 1, 0])
+        fps_camera.setWorldPose(look_at=target_position, pos=new_pos, up=[0, 0, 1])
 
     render_list = GSRenderer.renderCameras(
         gs_ply_file_path,
