@@ -27,6 +27,7 @@ class GSRenderer(object):
         bg_color: list=[1, 1, 1],
         mult: float = 0.5,
         device: str='cuda:0',
+        render_depth: bool = False,
     ) -> List:
         if len(camera_list) == 0:
             return []
@@ -44,6 +45,7 @@ class GSRenderer(object):
         pipe = pp.extract(args)
 
         background = torch.tensor(bg_color, dtype=torch.float32, device=device)
+        depth_bg = torch.zeros(3, dtype=torch.float32, device=device)
 
         gaussians = GaussianModel(sh_degree=sh_degree)
         gaussians.load_ply(gs_ply_file_path)
@@ -55,6 +57,29 @@ class GSRenderer(object):
             for camera in tqdm(camera_list):
                 gs_camera = GSCamera(camera, device)
                 render_dict = render_fastgs(gs_camera, gaussians, pipe, background, mult)
+
+                if render_depth:
+                    xyz_hom = torch.cat([gaussians.get_xyz, torch.ones_like(gaussians.get_xyz[:, :1])], dim=1)
+                    xyz_cam = (xyz_hom @ gs_camera.world_view_transform)[:, :3]
+                    depth_values = xyz_cam[:, 2:3].expand(-1, 3)
+                    depth_dict = render_fastgs(
+                        gs_camera, gaussians, pipe, depth_bg, mult,
+                        override_color=depth_values,
+                    )
+
+                    ones_color = torch.ones_like(depth_values)
+                    alpha_dict = render_fastgs(
+                        gs_camera, gaussians, pipe, depth_bg, mult,
+                        override_color=ones_color,
+                    )
+                    accum_alpha = alpha_dict["render"][0]
+
+                    raw_depth = depth_dict["render"][0]
+                    mask = accum_alpha > 1e-6
+                    depth = torch.zeros_like(raw_depth)
+                    depth[mask] = raw_depth[mask] / accum_alpha[mask]
+                    render_dict["depth"] = depth
+
                 for k, v in render_dict.items():
                     if isinstance(v, torch.Tensor):
                         render_dict[k] = v.cpu()
