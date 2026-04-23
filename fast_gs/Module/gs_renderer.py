@@ -3,7 +3,7 @@ import sys
 import torch
 
 from tqdm import tqdm
-from typing import List
+from typing import List, Union
 from argparse import ArgumentParser
 
 from base_gs_trainer.Data.gs_camera import GSCamera
@@ -12,6 +12,7 @@ from camera_control.Module.camera import Camera
 
 from fast_gs.Config.config import PipelineParams
 from fast_gs.Model.gs import GaussianModel
+from fast_gs.Method.io import loadGS
 from fast_gs.Method.render_kernel import render_fastgs
 
 
@@ -21,7 +22,7 @@ class GSRenderer(object):
 
     @staticmethod
     def renderCameras(
-        gs_ply_file_path: str,
+        gaussians: Union[str, GaussianModel],
         camera_list: List[Camera],
         sh_degree: int = 3,
         bg_color: list=[1, 1, 1],
@@ -32,11 +33,15 @@ class GSRenderer(object):
         if len(camera_list) == 0:
             return []
 
-        if not os.path.exists(gs_ply_file_path):
-            print('[ERROR][GSRenderer::renderCameras]')
-            print('\t gs ply file not exist!')
-            print('\t gs_ply_file_path:', gs_ply_file_path)
-            return []
+        if isinstance(gaussians, str):
+            gs_ply_file_path = gaussians
+            if not os.path.exists(gs_ply_file_path):
+                print('[ERROR][GSRenderer::renderCameras]')
+                print('\t gs ply file not exist!')
+                print('\t gs_ply_file_path:', gs_ply_file_path)
+                return []
+
+            gaussians = loadGS(gs_ply_file_path, sh_degree=sh_degree)
 
         parser = ArgumentParser(description="Training script parameters")
         pp = PipelineParams(parser)
@@ -46,9 +51,6 @@ class GSRenderer(object):
 
         background = torch.tensor(bg_color, dtype=torch.float32, device=device)
         depth_bg = torch.zeros(3, dtype=torch.float32, device=device)
-
-        gaussians = GaussianModel(sh_degree=sh_degree)
-        gaussians.load_ply(gs_ply_file_path)
 
         print('[INFO][GSRenderer::renderCameras]')
         print('\t start render cameras...')

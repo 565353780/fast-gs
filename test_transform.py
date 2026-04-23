@@ -14,11 +14,12 @@ import torch
 from camera_control.Module.camera_convertor import CameraConvertor
 
 from fast_gs.Module.gs_renderer import GSRenderer
+from fast_gs.Method.io import loadGS, saveGS
 from fast_gs.Method.transform import (
-    translateGSPlyFile,
-    scaleGSPlyFile,
-    rotateGSPlyFile,
-    transformGSPlyFile,
+    translateGS,
+    scaleGS,
+    rotateGS,
+    transformGS,
 )
 
 
@@ -176,15 +177,13 @@ def verifyRenderInvariance():
     renders_before = renderAll(gs_ply_file_path, sample_camera_list, sh_degree, bg_color)
 
     print('[INFO][test_transform] transforming gaussians...')
-    ok = transformGSPlyFile(
-        gs_ply_file_path=gs_ply_file_path,
-        transform=T_right,
-        save_gs_ply_file_path=transformed_gs_ply_file_path,
-        overwrite=True,
-        sh_degree=sh_degree,
-    )
-    if not ok:
-        print('[ERROR][test_transform] transformGSPlyFile failed')
+    gaussians = loadGS(gs_ply_file_path, sh_degree=sh_degree)
+    if gaussians is None:
+        print('[ERROR][test_transform] loadGS failed')
+        return False
+    transformGS(gaussians, T_right)
+    if not saveGS(gaussians, transformed_gs_ply_file_path, overwrite=True):
+        print('[ERROR][test_transform] saveGS failed')
         return False
 
     print('[INFO][test_transform] transforming cameras with same T_right...')
@@ -216,23 +215,30 @@ def smokeTestIndividualAPIs():
     os.makedirs(work_dir, exist_ok=True)
 
     all_ok = True
-    all_ok &= translateGSPlyFile(
-        gs_ply_file_path, [0.1, -0.2, 0.3],
-        work_dir + 'translated_fastgs_pcd.ply', overwrite=True,
+
+    gaussians = loadGS(gs_ply_file_path)
+    translateGS(gaussians, [0.1, -0.2, 0.3])
+    all_ok &= saveGS(
+        gaussians, work_dir + 'translated_fastgs_pcd.ply', overwrite=True,
     )
-    all_ok &= scaleGSPlyFile(
-        gs_ply_file_path, 1.5,
-        work_dir + 'scaled_fastgs_pcd.ply', overwrite=True,
+
+    gaussians = loadGS(gs_ply_file_path)
+    scaleGS(gaussians, 1.5)
+    all_ok &= saveGS(
+        gaussians, work_dir + 'scaled_fastgs_pcd.ply', overwrite=True,
     )
+
     rotation_right = [
         [0, 0, 1],
         [1, 0, 0],
         [0, 1, 0],
     ]
-    all_ok &= rotateGSPlyFile(
-        gs_ply_file_path, rotation_right,
-        work_dir + 'rotated_fastgs_pcd.ply', overwrite=True,
+    gaussians = loadGS(gs_ply_file_path)
+    rotateGS(gaussians, rotation_right)
+    all_ok &= saveGS(
+        gaussians, work_dir + 'rotated_fastgs_pcd.ply', overwrite=True,
     )
+
     print(f'[INFO][test_transform] smoke test APIs: {"PASS" if all_ok else "FAIL"}')
     return all_ok
 

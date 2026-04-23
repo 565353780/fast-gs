@@ -1,4 +1,3 @@
-import os
 import torch
 import numpy as np
 
@@ -10,7 +9,6 @@ from camera_control.Method.rotate import (
     rotmat2qvec,
     decompose_similarity_from_T,
 )
-from base_gs_trainer.Method.path import removeFile, createFileFolder
 
 from fast_gs.Model.gs import GaussianModel
 
@@ -176,40 +174,20 @@ def _extractPureRotation(mat_3x3: torch.Tensor) -> torch.Tensor:
     return R
 
 
-def _loadGaussians(gs_ply_file_path: str, sh_degree: int) -> GaussianModel:
-    gaussians = GaussianModel(sh_degree=sh_degree)
-    gaussians.load_ply(gs_ply_file_path)
-    return gaussians
-
-
-def _prepareOutputFile(save_gs_ply_file_path: str, overwrite: bool) -> bool:
-    if os.path.exists(save_gs_ply_file_path):
-        if not overwrite:
-            return False
-        removeFile(save_gs_ply_file_path)
-    createFileFolder(save_gs_ply_file_path)
-    return True
-
-
-def translateGSPlyFile(
-    gs_ply_file_path: str,
+def translateGS(
+    gaussians: GaussianModel,
     translate: Union[torch.Tensor, np.ndarray, list],
-    save_gs_ply_file_path: str,
-    overwrite: bool=False,
-    sh_degree: int=3,
 ) -> bool:
-    if os.path.exists(save_gs_ply_file_path) and not overwrite:
-        return True
-
-    if not os.path.exists(gs_ply_file_path):
-        print('[ERROR][transform::translateGSPlyFile]')
-        print('\t gs ply file not exist!')
-        print('\t gs_ply_file_path:', gs_ply_file_path)
+    '''
+    将 translate 以行向量右乘约定原地作用于 gaussians:
+        xyz_new = xyz + translate_row
+    '''
+    if gaussians is None:
+        print('[ERROR][transform::translateGS]')
+        print('\t gaussians is None!')
         return False
 
     translate_row = toTensor(translate, torch.float32, 'cpu').reshape(3)
-
-    gaussians = _loadGaussians(gs_ply_file_path, sh_degree)
 
     device = gaussians._xyz.device
     dtype = gaussians._xyz.dtype
@@ -218,37 +196,28 @@ def translateGSPlyFile(
     scale = torch.tensor(1.0, dtype=dtype, device=device)
 
     _applySimilarityToGaussians(gaussians, R_left, scale, translate_row)
-
-    if not _prepareOutputFile(save_gs_ply_file_path, overwrite=True):
-        return False
-    gaussians.save_ply(save_gs_ply_file_path)
     return True
 
 
-def scaleGSPlyFile(
-    gs_ply_file_path: str,
+def scaleGS(
+    gaussians: GaussianModel,
     scale: float,
-    save_gs_ply_file_path: str,
-    overwrite: bool=False,
-    sh_degree: int=3,
 ) -> bool:
-    if os.path.exists(save_gs_ply_file_path) and not overwrite:
-        return True
-
-    if not os.path.exists(gs_ply_file_path):
-        print('[ERROR][transform::scaleGSPlyFile]')
-        print('\t gs ply file not exist!')
-        print('\t gs_ply_file_path:', gs_ply_file_path)
+    '''
+    将标量 scale 原地作用于 gaussians:
+        xyz_new = xyz * scale
+    '''
+    if gaussians is None:
+        print('[ERROR][transform::scaleGS]')
+        print('\t gaussians is None!')
         return False
 
     scale_value = float(scale)
     if scale_value <= 0:
-        print('[ERROR][transform::scaleGSPlyFile]')
+        print('[ERROR][transform::scaleGS]')
         print('\t scale must be positive!')
         print('\t scale:', scale_value)
         return False
-
-    gaussians = _loadGaussians(gs_ply_file_path, sh_degree)
 
     device = gaussians._xyz.device
     dtype = gaussians._xyz.dtype
@@ -258,38 +227,26 @@ def scaleGSPlyFile(
     translate_row = torch.zeros(3, dtype=dtype, device=device)
 
     _applySimilarityToGaussians(gaussians, R_left, scale_t, translate_row)
-
-    if not _prepareOutputFile(save_gs_ply_file_path, overwrite=True):
-        return False
-    gaussians.save_ply(save_gs_ply_file_path)
     return True
 
 
-def rotateGSPlyFile(
-    gs_ply_file_path: str,
+def rotateGS(
+    gaussians: GaussianModel,
     rotation_right: Union[torch.Tensor, np.ndarray, list],
-    save_gs_ply_file_path: str,
-    overwrite: bool=False,
-    sh_degree: int=3,
 ) -> bool:
     '''
     rotation_right 按行向量右乘约定: xyz_new = xyz @ rotation_right
-    若输入不是正交矩阵, 用 SVD 提纯到最接近的旋转 (det=+1)
+    若输入不是正交矩阵, 用 SVD 提纯到最接近的旋转 (det=+1)。
+    原地作用于 gaussians。
     '''
-    if os.path.exists(save_gs_ply_file_path) and not overwrite:
-        return True
-
-    if not os.path.exists(gs_ply_file_path):
-        print('[ERROR][transform::rotateGSPlyFile]')
-        print('\t gs ply file not exist!')
-        print('\t gs_ply_file_path:', gs_ply_file_path)
+    if gaussians is None:
+        print('[ERROR][transform::rotateGS]')
+        print('\t gaussians is None!')
         return False
 
     rotation_right_tensor = toTensor(rotation_right, torch.float32, 'cpu').reshape(3, 3)
     R_right_pure = _extractPureRotation(rotation_right_tensor)
     R_left = R_right_pure.transpose(0, 1).contiguous()
-
-    gaussians = _loadGaussians(gs_ply_file_path, sh_degree)
 
     device = gaussians._xyz.device
     dtype = gaussians._xyz.dtype
@@ -298,19 +255,12 @@ def rotateGSPlyFile(
     translate_row = torch.zeros(3, dtype=dtype, device=device)
 
     _applySimilarityToGaussians(gaussians, R_left, scale, translate_row)
-
-    if not _prepareOutputFile(save_gs_ply_file_path, overwrite=True):
-        return False
-    gaussians.save_ply(save_gs_ply_file_path)
     return True
 
 
-def transformGSPlyFile(
-    gs_ply_file_path: str,
+def transformGS(
+    gaussians: GaussianModel,
     transform: Union[torch.Tensor, np.ndarray, list],
-    save_gs_ply_file_path: str,
-    overwrite: bool=False,
-    sh_degree: int=3,
 ) -> bool:
     '''
     输入 4x4 相似变换矩阵 T_right, 采用行向量右乘约定:
@@ -322,14 +272,11 @@ def transformGSPlyFile(
 
     与 camera-control 中 CameraConvertor.transformCameras 使用同一套 similarity 分解,
     使得场景与相机在同一矩阵驱动下同步变换后, 渲染图像保持不变。
+    原地作用于 gaussians。
     '''
-    if os.path.exists(save_gs_ply_file_path) and not overwrite:
-        return True
-
-    if not os.path.exists(gs_ply_file_path):
-        print('[ERROR][transform::transformGSPlyFile]')
-        print('\t gs ply file not exist!')
-        print('\t gs_ply_file_path:', gs_ply_file_path)
+    if gaussians is None:
+        print('[ERROR][transform::transformGS]')
+        print('\t gaussians is None!')
         return False
 
     T_right = toTensor(transform, torch.float32, 'cpu').reshape(4, 4)
@@ -338,11 +285,5 @@ def transformGSPlyFile(
     R_left, s, t_left = decompose_similarity_from_T(T_left, enforce_positive_scale=True)
     scale_safe = s.clamp(min=1e-8)
 
-    gaussians = _loadGaussians(gs_ply_file_path, sh_degree)
-
     _applySimilarityToGaussians(gaussians, R_left, scale_safe, t_left)
-
-    if not _prepareOutputFile(save_gs_ply_file_path, overwrite=True):
-        return False
-    gaussians.save_ply(save_gs_ply_file_path)
     return True
