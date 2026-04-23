@@ -87,5 +87,5 @@ def demo():
 
         camera.loadImage(image)
 
-        cv2.imwrite(save_render_folder_path + camera.image_id, camera.toImageVisCV(use_mask=False))
+        cv2.imwrite(save_render_folder_path + camera.image_id, camera.toImageCV(use_mask=False))
     return True
