@@ -1,10 +1,8 @@
 import os
-import sys
 import torch
 
 from tqdm import tqdm
 from typing import List, Union
-from argparse import ArgumentParser
 
 from base_gs_trainer.Data.gs_camera import GSCamera
 
@@ -43,11 +41,7 @@ class GSRenderer(object):
 
             gaussians = loadGS(gs_ply_file_path, sh_degree=sh_degree)
 
-        parser = ArgumentParser(description="Training script parameters")
-        pp = PipelineParams(parser)
-        args = parser.parse_args(sys.argv[1:])
-
-        pipe = pp.extract(args)
+        pipe = PipelineParams.default()
 
         background = torch.tensor(bg_color, dtype=torch.float32, device=device)
         depth_bg = torch.zeros(3, dtype=torch.float32, device=device)
