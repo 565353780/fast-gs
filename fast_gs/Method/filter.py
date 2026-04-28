@@ -62,13 +62,18 @@ def removeFloatGS(
     gs: GaussianModel,
     k: int = 16,
     std_ratio: float = 2.0,
+    bbox_scale: float = 1.1,
 ) -> bool:
     '''
-    基于统计 kNN 距离剔除 GaussianModel 中的离群 (漂浮) 高斯。
+    基于统计 kNN 距离与 bbox 膨胀策略剔除 GaussianModel 中的离群 (漂浮) 高斯。
 
-    判定准则:
-      - 对每个点计算其到 k 近邻的平均距离 d_i
-      - 若 d_i > mean(d) + std_ratio * std(d), 则视为离群点
+    流程:
+      1. 对每个点计算其到 k 近邻的平均距离 d_i;
+         若 d_i > mean(d) + std_ratio * std(d), 则视为 kNN 意义下的离群点;
+      2. 取 kNN 过滤后剩余点 (内点) 的索引, 计算其轴对齐包围盒 (AABB);
+      3. 将该 bbox 围绕中心膨胀 bbox_scale 倍;
+      4. 回到原始 GS, 仅删除位于膨胀后 bbox 之外的点
+         (即保留 kNN 内点 + 落在 bbox 内的部分原 kNN 离群点)。
 
     剔除时优先调用 GaussianModel.prune_points (可同步 optimizer 状态);
     若 optimizer 尚未初始化 (例如刚 load_ply), 则手动同步切分各属性张量。
@@ -93,6 +98,12 @@ def removeFloatGS(
         print('\t std_ratio:', std_ratio)
         return False
 
+    if bbox_scale <= 0:
+        print('[ERROR][filter::removeFloatGS]')
+        print('\t bbox_scale must be positive!')
+        print('\t bbox_scale:', bbox_scale)
+        return False
+
     with torch.no_grad():
         xyz = gs.get_xyz.detach()
         mean_knn = _computeKnnMeanDist(xyz, k=k)
@@ -101,7 +112,21 @@ def removeFloatGS(
         global_std = mean_knn.std()
         threshold = global_mean + std_ratio * global_std
 
-        prune_mask = mean_knn > threshold
+        knn_inlier_mask = mean_knn <= threshold
+
+        if not bool(knn_inlier_mask.any()):
+            return True
+
+        inlier_xyz = xyz[knn_inlier_mask]
+        bbox_min = inlier_xyz.amin(dim=0)
+        bbox_max = inlier_xyz.amax(dim=0)
+        bbox_center = 0.5 * (bbox_min + bbox_max)
+        bbox_half = 0.5 * (bbox_max - bbox_min) * bbox_scale
+        scaled_min = bbox_center - bbox_half
+        scaled_max = bbox_center + bbox_half
+
+        in_bbox_mask = ((xyz >= scaled_min) & (xyz <= scaled_max)).all(dim=1)
+        prune_mask = ~in_bbox_mask
 
     if not bool(prune_mask.any()):
         return True
