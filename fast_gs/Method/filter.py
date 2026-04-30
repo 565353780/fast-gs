@@ -4,7 +4,7 @@ import numpy as np
 from torch import nn
 from typing import Union
 
-from camera_control.Method.data import toNumpy
+from camera_control.Method.data import toTensor
 
 from fast_gs.Model.gs import GaussianModel
 
@@ -75,10 +75,16 @@ def searchFloatPointIdxs(
     对应坐标为 points[i] (i 为返回数组中的每个元素)。
     若无需剔除或点数过少, 返回 shape (0,) 的 int64 数组。
     '''
-    xyz = toNumpy(points)
+    if isinstance(points, torch.Tensor):
+        xyz = points.detach()
+    else:
+        xyz = toTensor(points)
 
     if xyz.ndim != 2 or xyz.shape[1] != 3:
         return np.array([], dtype=np.int64)
+
+    if not torch.is_floating_point(xyz):
+        xyz = xyz.float()
 
     n = int(xyz.shape[0])
     if n < max(k + 1, 4):
