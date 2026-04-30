@@ -1,5 +1,10 @@
 import torch
+import numpy as np
+
 from torch import nn
+from typing import Union
+
+from camera_control.Method.data import toNumpy
 
 from fast_gs.Model.gs import GaussianModel
 
@@ -58,6 +63,59 @@ def _manualPrune(gs: GaussianModel, valid_mask: torch.Tensor) -> None:
         gs.denom = gs.denom[valid_mask]
 
 
+@torch.no_grad()
+def searchFloatPointIdxs(
+    points: Union[torch.Tensor, np.ndarray, list],
+    k: int = 16,
+    std_ratio: float = 2.0,
+    bbox_scale: float = 1.1,
+) -> np.ndarray:
+    '''
+    与 removeFloatGS 相同的几何规则, 返回判定为漂浮点 (应剔除) 的索引。
+    对应坐标为 points[i] (i 为返回数组中的每个元素)。
+    若无需剔除或点数过少, 返回 shape (0,) 的 int64 数组。
+    '''
+    xyz = toNumpy(points)
+
+    if xyz.ndim != 2 or xyz.shape[1] != 3:
+        return np.array([], dtype=np.int64)
+
+    n = int(xyz.shape[0])
+    if n < max(k + 1, 4):
+        return np.array([], dtype=np.int64)
+
+    if std_ratio <= 0 or bbox_scale <= 0:
+        return np.array([], dtype=np.int64)
+
+    mean_knn = _computeKnnMeanDist(xyz, k=k)
+
+    global_mean = mean_knn.mean()
+    global_std = mean_knn.std()
+    threshold = global_mean + std_ratio * global_std
+
+    knn_inlier_mask = mean_knn <= threshold
+
+    if not bool(knn_inlier_mask.any()):
+        return np.array([], dtype=np.int64)
+
+    inlier_xyz = xyz[knn_inlier_mask]
+    bbox_min = inlier_xyz.amin(dim=0)
+    bbox_max = inlier_xyz.amax(dim=0)
+    bbox_center = 0.5 * (bbox_min + bbox_max)
+    bbox_half = 0.5 * (bbox_max - bbox_min) * bbox_scale
+    scaled_min = bbox_center - bbox_half
+    scaled_max = bbox_center + bbox_half
+
+    in_bbox_mask = ((xyz >= scaled_min) & (xyz <= scaled_max)).all(dim=1)
+    prune_mask = ~in_bbox_mask
+
+    if not bool(prune_mask.any()):
+        return np.array([], dtype=np.int64)
+
+    idx_t = torch.nonzero(prune_mask, as_tuple=False).squeeze(-1)
+    return idx_t.cpu().numpy().astype(np.int64)
+
+
 def removeFloatGS(
     gs: GaussianModel,
     k: int = 16,
@@ -106,30 +164,16 @@ def removeFloatGS(
 
     with torch.no_grad():
         xyz = gs.get_xyz.detach()
-        mean_knn = _computeKnnMeanDist(xyz, k=k)
+        float_idxs = searchFloatPointIdxs(
+            xyz, k=k, std_ratio=std_ratio, bbox_scale=bbox_scale
+        )
 
-        global_mean = mean_knn.mean()
-        global_std = mean_knn.std()
-        threshold = global_mean + std_ratio * global_std
-
-        knn_inlier_mask = mean_knn <= threshold
-
-        if not bool(knn_inlier_mask.any()):
-            return True
-
-        inlier_xyz = xyz[knn_inlier_mask]
-        bbox_min = inlier_xyz.amin(dim=0)
-        bbox_max = inlier_xyz.amax(dim=0)
-        bbox_center = 0.5 * (bbox_min + bbox_max)
-        bbox_half = 0.5 * (bbox_max - bbox_min) * bbox_scale
-        scaled_min = bbox_center - bbox_half
-        scaled_max = bbox_center + bbox_half
-
-        in_bbox_mask = ((xyz >= scaled_min) & (xyz <= scaled_max)).all(dim=1)
-        prune_mask = ~in_bbox_mask
-
-    if not bool(prune_mask.any()):
+    if float_idxs.size == 0:
         return True
+
+    device = xyz.device
+    prune_mask = torch.zeros(n, dtype=torch.bool, device=device)
+    prune_mask[torch.from_numpy(float_idxs).to(device=device, dtype=torch.long)] = True
 
     valid_mask = ~prune_mask
 
