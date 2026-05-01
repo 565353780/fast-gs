@@ -121,6 +121,36 @@ def searchFloatPointIdxs(
     idx_t = torch.nonzero(prune_mask, as_tuple=False).squeeze(-1)
     return idx_t.cpu().numpy().astype(np.int64)
 
+@torch.no_grad()
+def searchMainClusterPointIdxs(
+    points: Union[torch.Tensor, np.ndarray, list],
+    k: int = 16,
+    std_ratio: float = 2.0,
+    bbox_scale: float = 1.1,
+) -> np.ndarray:
+    '''
+    与 searchFloatPointIdxs 共用同一套几何规则; 返回主簇 (非漂浮) 点在原始
+    points 行顺序下的索引, 即全体 {0..N-1} 去掉 searchFloatPointIdxs 结果后的补集。
+    坐标无效 (非 Nx3) 时返回 shape (0,) 的 int64 数组。
+    '''
+    if isinstance(points, torch.Tensor):
+        xyz = points.detach()
+    else:
+        xyz = toTensor(points)
+
+    if xyz.ndim != 2 or xyz.shape[1] != 3:
+        return np.array([], dtype=np.int64)
+
+    n = int(xyz.shape[0])
+    float_idxs = searchFloatPointIdxs(
+        xyz, k=k, std_ratio=std_ratio, bbox_scale=bbox_scale
+    )
+    if float_idxs.size == 0:
+        return np.arange(n, dtype=np.int64)
+
+    keep = np.ones(n, dtype=np.bool_)
+    keep[float_idxs] = False
+    return np.nonzero(keep)[0].astype(np.int64)
 
 def removeFloatGS(
     gs: GaussianModel,
