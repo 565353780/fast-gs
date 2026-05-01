@@ -64,16 +64,29 @@ def _manualPrune(gs: GaussianModel, valid_mask: torch.Tensor) -> None:
 
 
 @torch.no_grad()
-def searchFloatPointIdxs(
+def searchMainClusterPointMask(
     points: Union[torch.Tensor, np.ndarray, list],
     k: int = 16,
     std_ratio: float = 2.0,
     bbox_scale: float = 1.1,
+    max_iters: int = 256,
 ) -> np.ndarray:
     '''
-    与 removeFloatGS 相同的几何规则, 返回判定为漂浮点 (应剔除) 的索引。
-    对应坐标为 points[i] (i 为返回数组中的每个元素)。
-    若无需剔除或点数过少, 返回 shape (0,) 的 int64 数组。
+    返回主簇掩码, 与输入 points 行顺序一一对应: True 为保留 (主簇), False 为漂浮点。
+
+    流程:
+      1. 计算每个点到 k 近邻的平均距离 d_i;
+      2. 以稳健阈值 median(d) + std_ratio * 1.4826 * MAD(d) 选出主簇种子,
+         比经典 mean+std 更抗少量极远点把统计量拉飞;
+      3. 若种子退化 (MAD 近 0 或种子点数过少), 至少保留 kNN 距离最小的一半
+         点作为种子, 避免空 bbox;
+      4. 由种子构造初始 AABB, 记录初始边长 initial_extent;
+      5. 反复将当前 bbox 沿三轴各向外扩张 0.5 * (bbox_scale - 1.0) * initial_extent,
+         把落入扩张 bbox 的原始点全部纳入主簇, 再用主簇点重算 bbox 进入下一轮;
+      6. 当没有新点被吸纳时收敛; 掩码中 True 为最终主簇。
+
+    输入无效、点数过少或参数非法时, 返回与点数一致的 True 掩码 (不做剔除);
+    无法确定点数时返回 shape (0,) 的 bool 数组。
     '''
     if isinstance(points, torch.Tensor):
         xyz = points.detach()
@@ -81,76 +94,67 @@ def searchFloatPointIdxs(
         xyz = toTensor(points)
 
     if xyz.ndim != 2 or xyz.shape[1] != 3:
-        return np.array([], dtype=np.int64)
+        if xyz.ndim == 2 and int(xyz.shape[0]) > 0:
+            return np.ones(int(xyz.shape[0]), dtype=np.bool_)
+        return np.array([], dtype=np.bool_)
 
     if not torch.is_floating_point(xyz):
         xyz = xyz.float()
 
     n = int(xyz.shape[0])
     if n < max(k + 1, 4):
-        return np.array([], dtype=np.int64)
+        return np.ones(n, dtype=np.bool_)
 
     if std_ratio <= 0 or bbox_scale <= 0:
-        return np.array([], dtype=np.int64)
+        return np.ones(n, dtype=np.bool_)
 
     mean_knn = _computeKnnMeanDist(xyz, k=k)
 
-    global_mean = mean_knn.mean()
-    global_std = mean_knn.std()
-    threshold = global_mean + std_ratio * global_std
+    median_knn = mean_knn.median()
+    mad = (mean_knn - median_knn).abs().median()
+    robust_std = mad * 1.4826
+    if float(robust_std) <= 0:
+        # MAD 退化时回落到经典 std, 保证阈值不为 0
+        robust_std = mean_knn.std()
+    threshold = median_knn + std_ratio * robust_std
 
-    knn_inlier_mask = mean_knn <= threshold
+    seed_mask = mean_knn <= threshold
 
-    if not bool(knn_inlier_mask.any()):
-        return np.array([], dtype=np.int64)
+    # 兜底: 至少保留 kNN 距离最小的一半点作为种子, 避免极端情况下种子太小
+    min_seed = max(k + 1, n // 2)
+    if int(seed_mask.sum()) < min_seed:
+        sorted_idx = torch.argsort(mean_knn)
+        seed_mask = torch.zeros_like(seed_mask)
+        seed_mask[sorted_idx[:min_seed]] = True
 
-    inlier_xyz = xyz[knn_inlier_mask]
-    bbox_min = inlier_xyz.amin(dim=0)
-    bbox_max = inlier_xyz.amax(dim=0)
-    bbox_center = 0.5 * (bbox_min + bbox_max)
-    bbox_half = 0.5 * (bbox_max - bbox_min) * bbox_scale
-    scaled_min = bbox_center - bbox_half
-    scaled_max = bbox_center + bbox_half
+    seed_xyz = xyz[seed_mask]
+    bbox_min = seed_xyz.amin(dim=0)
+    bbox_max = seed_xyz.amax(dim=0)
+    initial_extent = bbox_max - bbox_min
 
-    in_bbox_mask = ((xyz >= scaled_min) & (xyz <= scaled_max)).all(dim=1)
-    prune_mask = ~in_bbox_mask
+    # 每轮按初始边长的 (bbox_scale - 1.0) 比例扩张 bbox 总边长, 平均分到两侧
+    half_step = 0.5 * max(bbox_scale - 1.0, 0.0) * initial_extent
 
-    if not bool(prune_mask.any()):
-        return np.array([], dtype=np.int64)
+    inside_mask = seed_mask.clone()
+    inside_count = int(inside_mask.sum())
 
-    idx_t = torch.nonzero(prune_mask, as_tuple=False).squeeze(-1)
-    return idx_t.cpu().numpy().astype(np.int64)
+    for _ in range(max(int(max_iters), 1)):
+        test_min = bbox_min - half_step
+        test_max = bbox_max + half_step
 
-@torch.no_grad()
-def searchMainClusterPointIdxs(
-    points: Union[torch.Tensor, np.ndarray, list],
-    k: int = 16,
-    std_ratio: float = 2.0,
-    bbox_scale: float = 1.1,
-) -> np.ndarray:
-    '''
-    与 searchFloatPointIdxs 共用同一套几何规则; 返回主簇 (非漂浮) 点在原始
-    points 行顺序下的索引, 即全体 {0..N-1} 去掉 searchFloatPointIdxs 结果后的补集。
-    坐标无效 (非 Nx3) 时返回 shape (0,) 的 int64 数组。
-    '''
-    if isinstance(points, torch.Tensor):
-        xyz = points.detach()
-    else:
-        xyz = toTensor(points)
+        new_inside = ((xyz >= test_min) & (xyz <= test_max)).all(dim=1)
+        new_count = int(new_inside.sum())
+        if new_count <= inside_count:
+            break
 
-    if xyz.ndim != 2 or xyz.shape[1] != 3:
-        return np.array([], dtype=np.int64)
+        inside_mask = new_inside
+        inside_count = new_count
+        kept_xyz = xyz[inside_mask]
+        bbox_min = kept_xyz.amin(dim=0)
+        bbox_max = kept_xyz.amax(dim=0)
 
-    n = int(xyz.shape[0])
-    float_idxs = searchFloatPointIdxs(
-        xyz, k=k, std_ratio=std_ratio, bbox_scale=bbox_scale
-    )
-    if float_idxs.size == 0:
-        return np.arange(n, dtype=np.int64)
+    return inside_mask.cpu().numpy().astype(np.bool_)
 
-    keep = np.ones(n, dtype=np.bool_)
-    keep[float_idxs] = False
-    return np.nonzero(keep)[0].astype(np.int64)
 
 def removeFloatGS(
     gs: GaussianModel,
@@ -159,15 +163,16 @@ def removeFloatGS(
     bbox_scale: float = 1.1,
 ) -> bool:
     '''
-    基于统计 kNN 距离与 bbox 膨胀策略剔除 GaussianModel 中的离群 (漂浮) 高斯。
+    基于稳健 kNN 种子 + 迭代 bbox 扩张策略剔除 GaussianModel 中的离群 (漂浮) 高斯。
 
-    流程:
+    流程 (与 searchMainClusterPointMask 一致, 剔除 ~mask 部分):
       1. 对每个点计算其到 k 近邻的平均距离 d_i;
-         若 d_i > mean(d) + std_ratio * std(d), 则视为 kNN 意义下的离群点;
-      2. 取 kNN 过滤后剩余点 (内点) 的索引, 计算其轴对齐包围盒 (AABB);
-      3. 将该 bbox 围绕中心膨胀 bbox_scale 倍;
-      4. 回到原始 GS, 仅删除位于膨胀后 bbox 之外的点
-         (即保留 kNN 内点 + 落在 bbox 内的部分原 kNN 离群点)。
+         以 median(d) + std_ratio * 1.4826 * MAD(d) 作为稳健阈值挑选主簇种子,
+         必要时用最小 kNN 距离的一半点兜底, 抗少量极远漂浮点把均值/方差拉飞;
+      2. 由种子点构造初始 AABB, 记录初始边长 initial_extent;
+      3. 反复将当前 bbox 沿三轴各向外扩张 0.5 * (bbox_scale - 1.0) * initial_extent,
+         把落入扩张 bbox 的点全部纳入主簇, 再用主簇点重算 bbox 进入下一轮;
+      4. 当没有新点被吸纳时收敛, 仍未吸纳的点视为漂浮点, 从 GS 中剔除。
 
     剔除时优先调用 GaussianModel.prune_points (可同步 optimizer 状态);
     若 optimizer 尚未初始化 (例如刚 load_ply), 则手动同步切分各属性张量。
@@ -200,18 +205,16 @@ def removeFloatGS(
 
     with torch.no_grad():
         xyz = gs.get_xyz.detach()
-        float_idxs = searchFloatPointIdxs(
+        keep_np = searchMainClusterPointMask(
             xyz, k=k, std_ratio=std_ratio, bbox_scale=bbox_scale
         )
 
-    if float_idxs.size == 0:
+    if keep_np.size != n or np.all(keep_np):
         return True
 
     device = xyz.device
-    prune_mask = torch.zeros(n, dtype=torch.bool, device=device)
-    prune_mask[torch.from_numpy(float_idxs).to(device=device, dtype=torch.long)] = True
-
-    valid_mask = ~prune_mask
+    valid_mask = torch.from_numpy(keep_np).to(device=device, dtype=torch.bool)
+    prune_mask = ~valid_mask
 
     if getattr(gs, 'optimizer', None) is None:
         _manualPrune(gs, valid_mask)
